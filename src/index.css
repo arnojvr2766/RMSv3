@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  html {
+    font-family: 'Roboto', system-ui, sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', 'Poppins', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary-500 text-secondary-900 font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:bg-primary-600 hover:-translate-y-0.5 hover:shadow-lg;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary-900 text-primary-500 border border-secondary-700 px-4 py-2 rounded-lg transition-all duration-200 hover:bg-secondary-800;
+  }
+  
+  .btn-accent {
+    @apply bg-accent-blue-500 text-white px-4 py-2 rounded-lg transition-all duration-200 hover:bg-accent-blue-600;
+  }
+  
+  .card {
+    @apply bg-white dark:bg-secondary-800 border border-gray-200 dark:border-secondary-700 rounded-lg p-6 shadow-sm;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 border border-gray-300 dark:border-secondary-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-secondary-700 dark:text-white;
+  }
+}

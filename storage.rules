@@ -1,0 +1,49 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function getUserFacilities() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.facilities;
+    }
+    
+    function canAccessFacility(facilityId) {
+      return getUserRole() == 'super-admin' || facilityId in getUserFacilities();
+    }
+    
+    // Facility documents
+    match /facilities/{facilityId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && canAccessFacility(facilityId);
+    }
+    
+    // Tenant documents
+    match /tenants/{tenantId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && 
+        canAccessFacility(firestore.get(/databases/(default)/documents/tenants/$(tenantId)).data.facilityId);
+    }
+    
+    // Rental documents
+    match /rentals/{rentalId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && 
+        canAccessFacility(firestore.get(/databases/(default)/documents/rentals/$(rentalId)).data.facilityId);
+    }
+    
+    // User profile images
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if isAuthenticated() && 
+        (getUserRole() == 'super-admin' || request.auth.uid == userId);
+    }
+    
+    // General uploads (for receipts, reports, etc.)
+    match /uploads/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

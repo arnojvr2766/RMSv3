@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "firebase": {
+      "command": "npx",
+      "args": ["-y", "firebase-tools@latest", "experimental:mcp"]
+    },
+    "browser": {
+      "command": "browser-mcp",
+      "args": []
+    }
+  },
+  "client": {
+    "timeout": 30000,
+    "retries": 3,
+    "debug": false
+  }
+}
