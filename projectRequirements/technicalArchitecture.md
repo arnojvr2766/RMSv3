@@ -1123,3 +1123,83 @@ import {
 ---
 
 *End of Technical Architecture Document*
+
+## 🏗️ **Home Page Architecture Plan**
+
+### **File Structure for Home Page:**
+
+```
+<code_block_to_apply_changes_from>
+```
+
+### **Key Components to Create:**
+
+#### **1. AuthContext.tsx** - Role Management
+- Manages user authentication state
+- Handles role switching for debugging
+- Provides facilities access
+- Mock data for development
+
+#### **2. Header.tsx** - Top Navigation
+- Role toggle for debugging (temporary)
+- User menu with profile
+- Notifications
+- Search functionality
+
+#### **3. RoleToggle.tsx** - Debug Component
+- Dropdown to switch between roles
+- Visual indicator of current role
+- Temporary component for development
+
+#### **4. HomePage.tsx** - Main Container
+- Combines header, sidebar, and dashboard
+- Responsive layout
+- Handles routing logic
+
+#### **5. Dashboard.tsx** - Content Area
+- Statistics cards
+- Recent activity
+- Quick actions
+- Charts and graphs
+
+### **Role-Based Features:**
+
+#### **Super Admin:**
+- Access to all facilities
+- User management
+- System configuration
+- Global reports
+
+#### **Facility Admin:**
+- Access to assigned facilities
+- Approve/reject proposals
+- Manage facility settings
+- Generate reports
+
+#### **Standard User:**
+- Create proposals
+- View assigned facilities
+- Basic reporting
+- Limited access
+
+#### **Read-Only User:**
+- View-only access
+- Generate reports
+- No modifications
+
+### **Design Considerations:**
+
+1. **Modular Components**: Each component has a single responsibility
+2. **Reusable UI**: Components can be used across different pages
+3. **Type Safety**: Full TypeScript support
+4. **Responsive Design**: Mobile-first approach
+5. **Accessibility**: WCAG 2.1 AA compliance
+6. **Performance**: Lazy loading and code splitting
+
+### **State Management:**
+
+- **AuthContext**: Global authentication state
+- **Local State**: Component-specific state
+- **Future**: Redux Toolkit for complex state
+
+Would you like me to help you create any specific component from this architecture? I can guide you through the implementation of each piece while maintaining clean, maintainable code structure.

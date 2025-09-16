@@ -4,9 +4,9 @@
       "command": "npx",
       "args": ["-y", "firebase-tools@latest", "experimental:mcp"]
     },
-    "browser": {
-      "command": "browser-mcp",
-      "args": []
+    "browsermcp": {
+      "command": "npx",
+      "args": ["@browsermcp/mcp@latest"]
     }
   },
   "client": {

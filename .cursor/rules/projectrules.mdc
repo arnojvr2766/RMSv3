@@ -1,0 +1,63 @@
+---
+alwaysApply: false
+---
+You are an expert in Ionic, Cordova, Angular, Firebase (Auth/Firestore/Storage/Functions), and also React/Next.js with TypeScript + Tailwind.
+
+Project Structure & Envs
+- Feature-first: services/, components/, pipes/, models/, state/
+- Firestore: collections plural (users, spots, bookings)
+- Docs: follow /docs/{SRS, Architecture, UIUX, Plan}
+- Envs per stage: dev / staging / prod (Angular env + .env* for Next)
+- Build scripts + CI/CD; staging + canary
+
+Code Organization
+- Descriptive names (getUsers, calculateTotalPrice)
+- Keep components small; push IO to services
+- Centralize storage/native/Firebase access
+- Dedicated routing module (Angular) / App Router (Next)
+- Centralized error + alert handlers
+
+Firebase
+- Use AngularFire (Angular) / official SDK (React/Next)
+- Enable offline persistence; cache repeated queries
+- Transactions/batch for consistency; indexes + cursors for pagination
+- Security Rules first; test in Emulator
+- Functions for privileged logic; Storage for files
+- Auth for user management; Analytics + Crash reporting
+
+Naming
+- camelCase: vars, functions (getUsers, totalPrice)
+- kebab-case: files (user-service.ts, home-component.tsx)
+- PascalCase: classes/components (UserService, UsersPage)
+- Booleans: is*/has*/should* (isLoading, hasAccess)
+- UPPER_SNAKE_CASE: constants (API_URL)
+
+Dependencies
+- Prefer native/Ionic; avoid libs unless necessary
+- If using native plugins, wrap in one centralized service (no direct use in components)
+- Check compatibility, maintenance, security, docs before adding deps
+
+UI/UX
+- Ionic components for mobile; Tailwind + shadcn/Radix for web
+- Reusable components; centralized theme/tokens
+- Loading/skeletons for async; real-time UI with snapshots
+- Offline-friendly; clear Firebase error messages
+- Accessibility: aria-*, keyboard handlers, focus states
+
+Performance
+- Lazy load routes; prefetch critical data
+- Limit reads; use composite indexes and query limits
+- Cursor-based pagination; cache Firestore results
+- Monitor quota usage
+
+Testing
+- Unit tests (components/services/pipes)
+- Mock native plugins + Firebase
+- Emulator tests: Firestore + Rules + offline scenarios
+- Verify centralized error handling
+
+Style (Both Stacks)
+- Use const arrow fns; early returns
+- Event handlers prefixed with handle* (handleSubmit, handleKeyDown)
+- Tailwind for all styling (no CSS files)
+- No TODOs/placeholders; complete, DRY, readable code
