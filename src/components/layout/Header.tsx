@@ -1,0 +1,115 @@
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Bell, Settings, LogOut, Menu, Database } from 'lucide-react';
+import RoleToggle from '../ui/RoleToggle';
+import Button from '../ui/Button';
+import { useRole } from '../../contexts/RoleContext';
+import DataManagement from '../forms/DataManagement';
+
+interface HeaderProps {
+  onMenuToggle: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
+  const { currentRole, isSystemAdmin } = useRole();
+  const [showDataManagement, setShowDataManagement] = useState(false);
+
+  return (
+    <header className="bg-gray-800 border-b border-gray-700">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+                 {/* Mobile Menu Button */}
+                 <div className="flex items-center space-x-3">
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={onMenuToggle}
+                     className="lg:hidden"
+                   >
+                     <Menu className="w-5 h-5" />
+                   </Button>
+
+                   {/* Logo and Title */}
+                   <Link to="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                     <img 
+                       src="/Unitra1024.png" 
+                       alt="Unitra Logo" 
+                       className="w-10 h-10 rounded-lg"
+                     />
+                     <div>
+                       <h1 className="text-xl font-bold text-white">
+                         Unitra
+                       </h1>
+                       <p className="text-xs text-secondary">
+                         Units - Rent - Admin
+                       </p>
+                       <p className="text-xs text-gray-400">
+                         Version 1.0.0
+                       </p>
+                     </div>
+                   </Link>
+                 </div>
+
+          {/* Role Toggle - Debug Mode */}
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-secondary font-medium">
+                DEBUG MODE:
+              </span>
+              <RoleToggle />
+            </div>
+            
+            {/* Current Role Indicator */}
+            <div className="flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
+              <span className="text-xs text-secondary">
+                Current Role:
+              </span>
+              <span className={`text-xs font-semibold ${
+                isSystemAdmin 
+                  ? 'text-primary-500' 
+                  : 'text-accent-blue-500'
+              }`}>
+                {currentRole === 'system_admin' ? 'System Admin' : 'Standard User'}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center space-x-2">
+            {isSystemAdmin && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowDataManagement(true)}
+              >
+                <Database className="w-4 h-4" />
+              </Button>
+            )}
+            <Button variant="ghost" size="sm">
+              <Bell className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm">
+              <Settings className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="sm">
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Management Modal */}
+      {showDataManagement && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <DataManagement
+              onClose={() => setShowDataManagement(false)}
+            />
+          </div>
+        </div>
+      )}
+    </header>
+  );
+};
+
+export default Header;

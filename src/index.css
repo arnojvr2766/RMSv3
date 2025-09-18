@@ -1,37 +1,112 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;600;700&display=swap');
+@theme {
+  --color-primary-50: #fffef0;
+  --color-primary-100: #fffce6;
+  --color-primary-200: #fff8cc;
+  --color-primary-300: #fff2b3;
+  --color-primary-400: #ffec99;
+  --color-primary-500: #FFD300;
+  --color-primary-600: #e6bd00;
+  --color-primary-700: #cca700;
+  --color-primary-800: #b39100;
+  --color-primary-900: #997b00;
+
+  --color-secondary-50: #f5f5f5;
+  --color-secondary-100: #e5e5e5;
+  --color-secondary-200: #cccccc;
+  --color-secondary-300: #b3b3b3;
+  --color-secondary-400: #999999;
+  --color-secondary-500: #808080;
+  --color-secondary-600: #666666;
+  --color-secondary-700: #4d4d4d;
+  --color-secondary-800: #333333;
+  --color-secondary-900: #1A1A1A;
+
+  --color-accent-blue-50: #f0f9ff;
+  --color-accent-blue-100: #e0f2fe;
+  --color-accent-blue-200: #bae6fd;
+  --color-accent-blue-300: #7dd3fc;
+  --color-accent-blue-400: #38bdf8;
+  --color-accent-blue-500: #0ea5e9;
+  --color-accent-blue-600: #0284c7;
+  --color-accent-blue-700: #0369a1;
+  --color-accent-blue-800: #075985;
+  --color-accent-blue-900: #0c4a6e;
+
+  --color-accent-green-50: #f0fdf4;
+  --color-accent-green-100: #dcfce7;
+  --color-accent-green-200: #bbf7d0;
+  --color-accent-green-300: #86efac;
+  --color-accent-green-400: #4ade80;
+  --color-accent-green-500: #22c55e;
+  --color-accent-green-600: #16a34a;
+  --color-accent-green-700: #15803d;
+  --color-accent-green-800: #166534;
+  --color-accent-green-900: #14532d;
+
+  --color-success: #22c55e;
+  --color-warning: #FFD300;
+  --color-error: #ef4444;
+  --color-info: #0ea5e9;
+}
 
 @layer base {
   html {
     font-family: 'Roboto', system-ui, sans-serif;
+    background-color: #1A1A1A; /* Dark background */
+    color: #FFFFFF; /* White text */
+  }
+  
+  body {
+    background-color: #1A1A1A;
+    color: #FFFFFF;
   }
   
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Inter', 'Poppins', system-ui, sans-serif;
+    color: #FFFFFF;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-500 text-secondary-900 font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:bg-primary-600 hover:-translate-y-0.5 hover:shadow-lg;
+    @apply bg-primary-500 text-secondary-900 font-semibold px-4 py-2 rounded-lg transition-all duration-200 hover:bg-primary-600 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary-500/30;
   }
   
   .btn-secondary {
-    @apply bg-secondary-900 text-primary-500 border border-secondary-700 px-4 py-2 rounded-lg transition-all duration-200 hover:bg-secondary-800;
+    @apply bg-transparent text-white border border-white px-4 py-2 rounded-lg transition-all duration-200 hover:bg-white hover:text-secondary-900;
   }
   
   .btn-accent {
-    @apply bg-accent-blue-500 text-white px-4 py-2 rounded-lg transition-all duration-200 hover:bg-accent-blue-600;
+    @apply bg-accent-blue-500 text-white px-4 py-2 rounded-lg transition-all duration-200 hover:bg-accent-blue-600 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-accent-blue-500/30;
   }
   
   .card {
-    @apply bg-white dark:bg-secondary-800 border border-gray-200 dark:border-secondary-700 rounded-lg p-6 shadow-sm;
+    @apply bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg;
   }
   
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 dark:border-secondary-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-secondary-700 dark:text-white;
+    @apply w-full px-3 py-2 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-800 text-white;
+  }
+  
+  .text-primary {
+    color: #FFFFFF;
+  }
+  
+  .text-secondary {
+    color: #B0B0B0;
+  }
+  
+  .text-success {
+    color: #4ADE80;
+  }
+  
+  .text-error {
+    color: #F87171;
+  }
+  
+  .bg-surface {
+    background-color: #2A2A2A;
   }
 }

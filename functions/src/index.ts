@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -130,6 +131,81 @@ export const sendNotification = onRequest(
     } catch (error) {
       console.error('Error sending notification:', error);
       response.status(500).json({ error: 'Failed to send notification' });
+    }
+  }
+);
+
+// Daily overdue payment check function
+export const checkOverduePayments = onSchedule(
+  {
+    schedule: '0 9 * * *', // Run daily at 9 AM
+    region: 'us-central1',
+    timeZone: 'Africa/Johannesburg',
+  },
+  async () => {
+    try {
+      console.log('Starting daily overdue payment check...');
+      
+      // Get all payment schedules
+      const schedulesSnapshot = await admin.firestore()
+        .collection('payment_schedules')
+        .get();
+      
+      const batch = admin.firestore().batch();
+      let overdueCount = 0;
+
+      for (const scheduleDoc of schedulesSnapshot.docs) {
+        const schedule = scheduleDoc.data();
+        const payments = schedule.payments || [];
+        let hasUpdates = false;
+        const updatedPayments = [...payments];
+
+        for (let i = 0; i < updatedPayments.length; i++) {
+          const payment = updatedPayments[i];
+          
+          // Only check pending payments
+          if (payment.status === 'pending') {
+            const dueDate = payment.dueDate.toDate();
+            const today = new Date();
+            
+            // Check if payment is overdue (past due date)
+            if (dueDate < today) {
+              updatedPayments[i] = {
+                ...payment,
+                status: 'overdue'
+              };
+              hasUpdates = true;
+              overdueCount++;
+              console.log(`Payment ${payment.month} for lease ${schedule.leaseId} is now overdue`);
+            }
+          }
+        }
+
+        // Update the schedule if there were changes
+        if (hasUpdates) {
+          // Recalculate totals
+          const totalAmount = updatedPayments.reduce((sum: number, p: any) => sum + p.amount, 0);
+          const totalPaid = updatedPayments.reduce((sum: number, p: any) => sum + (p.paidAmount || 0), 0);
+          const outstandingAmount = totalAmount - totalPaid;
+
+          batch.update(scheduleDoc.ref, {
+            payments: updatedPayments,
+            totalAmount,
+            totalPaid,
+            outstandingAmount,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      if (overdueCount > 0) {
+        await batch.commit();
+        console.log(`Updated ${overdueCount} payments to overdue status`);
+      } else {
+        console.log('No overdue payments found');
+      }
+    } catch (error) {
+      console.error('Error checking overdue payments:', error);
     }
   }
 );

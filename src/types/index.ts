@@ -16,11 +16,8 @@ export interface Facility {
     gracePeriodDays: number;
     paymentMethods: string[];
   };
-  branding: {
-    logo?: string;
-    primaryColor: string;
-    secondaryColor: string;
-  };
+  primaryColor: string;
+  billingEntity?: string;
   status: 'active' | 'inactive';
   createdAt: Date;
   updatedAt: Date;

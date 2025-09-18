@@ -66,7 +66,8 @@ src/
 │   └── reports/
 ├── hooks/               # Custom React hooks
 ├── services/            # API and business logic
-├── store/               # State management (Redux Toolkit)
+├── store/               # 
+ (Redux Toolkit)
 ├── utils/               # Utility functions
 ├── types/               # TypeScript type definitions
 └── assets/              # Static assets

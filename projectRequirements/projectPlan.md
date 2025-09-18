@@ -47,15 +47,11 @@ Building a comprehensive Progressive Web App (PWA) for rental property managemen
 ### 🌐 Browser MCP Testing
 - [x] Install Browser MCP extension
 - [x] Test browser automation capabilities
-- [ ] Create E2E test examples
-- [ ] Verify MCP server communication
 
 ### 📱 PWA Configuration
 - [ ] Set up service worker
 - [ ] Configure manifest.json
-- [ ] Add offline capabilities
 - [ ] Set up push notifications
-- [ ] Test PWA installation
 
 ### 🏗️ Core Application Structure
 - [ ] Set up routing (React Router)
