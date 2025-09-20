@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit, Trash2, Eye, DoorClosed, FileText, DollarSign, UserPlus } from 'lucide-react';
+import { Building2, Plus, Edit, Trash2, Eye, DoorClosed, FileText, DollarSign, UserPlus, Grid3X3, Table, Search, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../contexts/RoleContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -34,7 +34,6 @@ interface Facility {
     paymentMethods: string[];
   };
   primaryColor: string;
-  billingEntity?: string;
   status: 'active' | 'inactive';
   createdAt: any;
   updatedAt: any;
@@ -45,13 +44,19 @@ import Card from '../components/ui/Card';
 
 const Facilities: React.FC = () => {
   const { currentRole, isSystemAdmin } = useRole();
-  const { allowStandardUserFacilities } = useSettings();
+  const { allowStandardUserFacilities, allowStandardUserRooms } = useSettings();
   const navigate = useNavigate();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityStats, setFacilityStats] = useState<Record<string, FacilityStats>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
+  
+  // View and search state
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<keyof Facility | 'totalRooms' | 'occupiedRooms' | 'availableRooms' | 'maintenanceRooms' | 'roomsWithPenalties'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Check if user can manage facilities
   const canManageFacilities = isSystemAdmin || (currentRole === 'standard_user' && allowStandardUserFacilities);
@@ -106,6 +111,54 @@ const Facilities: React.FC = () => {
     }
   };
 
+  // Filter and sort facilities
+  const filteredAndSortedFacilities = facilities
+    .filter(facility => {
+      if (!searchTerm) return true;
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        facility.name.toLowerCase().includes(searchLower) ||
+        facility.address.toLowerCase().includes(searchLower) ||
+        facility.billingEntity.toLowerCase().includes(searchLower) ||
+        facility.contactInfo.phone.includes(searchTerm) ||
+        facility.contactInfo.email.toLowerCase().includes(searchLower)
+      );
+    })
+    .sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      if (sortField === 'totalRooms' || sortField === 'occupiedRooms' || sortField === 'availableRooms' || sortField === 'maintenanceRooms' || sortField === 'roomsWithPenalties') {
+        aValue = a.id ? facilityStats[a.id]?.[sortField] || 0 : 0;
+        bValue = b.id ? facilityStats[b.id]?.[sortField] || 0 : 0;
+      } else {
+        aValue = a[sortField];
+        bValue = b[sortField];
+      }
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (aValue < bValue) {
+        return sortDirection === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortDirection === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+
+  const handleSort = (field: keyof Facility | 'totalRooms' | 'occupiedRooms' | 'availableRooms' | 'maintenanceRooms' | 'roomsWithPenalties') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
 
   if (showForm) {
     return (
@@ -130,8 +183,8 @@ const Facilities: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Page Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3 mb-2">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
                 <Building2 className="w-6 h-6 text-secondary-900" />
               </div>
@@ -149,6 +202,54 @@ const Facilities: React.FC = () => {
                 Add Facility
               </Button>
             )}
+          </div>
+
+          {/* Search and View Controls */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search facilities..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 w-64"
+                />
+              </div>
+              
+              {/* Results count */}
+              <span className="text-gray-400 text-sm">
+                {filteredAndSortedFacilities.length} of {facilities.length} facilities
+              </span>
+            </div>
+
+            {/* View Toggle */}
+            <div className="flex items-center space-x-2 bg-gray-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                  viewMode === 'cards'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Grid3X3 className="w-4 h-4" />
+                <span>Cards</span>
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                  viewMode === 'table'
+                    ? 'bg-primary-500 text-white'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Table className="w-4 h-4" />
+                <span>Table</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -189,9 +290,20 @@ const Facilities: React.FC = () => {
               </Button>
             )}
           </Card>
-        ) : (
+        ) : filteredAndSortedFacilities.length === 0 ? (
+          <Card className="text-center py-12">
+            <Search className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">No Facilities Match Your Search</h2>
+            <p className="text-gray-400 mb-6">
+              Try adjusting your search terms or clear the search to see all facilities.
+            </p>
+            <Button onClick={() => setSearchTerm('')}>
+              Clear Search
+            </Button>
+          </Card>
+        ) : viewMode === 'cards' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {facilities.map((facility) => (
+            {filteredAndSortedFacilities.map((facility) => (
               <Card key={facility.id} className="hover:bg-gray-700 transition-colors">
                 <div>
                   <div className="flex items-start justify-between mb-4">
@@ -352,6 +464,167 @@ const Facilities: React.FC = () => {
               </Card>
             ))}
           </div>
+        ) : (
+          /* Table View */
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-800">
+                  <tr>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('name')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Facility</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('billingEntity')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Billing</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('totalRooms')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Total Rooms</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('occupiedRooms')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Occupied</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('availableRooms')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Available</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('maintenanceRooms')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Maintenance</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">
+                      <button
+                        onClick={() => handleSort('roomsWithPenalties')}
+                        className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+                      >
+                        <span>Penalties</span>
+                        <ArrowUpDown className="w-4 h-4" />
+                      </button>
+                    </th>
+                    <th className="px-6 py-3 text-left">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {filteredAndSortedFacilities.map((facility) => {
+                    const stats = facility.id ? facilityStats[facility.id] : null;
+                    return (
+                      <tr key={facility.id} className="hover:bg-gray-800 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="text-white font-medium">{facility.name}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-white font-medium">{facility.billingEntity}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-white font-medium">{stats?.totalRooms || 0}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-green-400 font-medium">{stats?.occupiedRooms || 0}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-blue-400 font-medium">{stats?.availableRooms || 0}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-orange-400 font-medium">{stats?.maintenanceRooms || 0}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-red-400 font-medium">{stats?.roomsWithPenalties || 0}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-2">
+                            {/* Edit/Delete Actions */}
+                            {canManageFacilities && (
+                              <>
+                                <button
+                                  onClick={() => handleEdit(facility)}
+                                  className="p-1 text-gray-400 hover:text-white transition-colors"
+                                  title="Edit Facility"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => facility.id && handleDelete(facility.id)}
+                                  className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                                  title="Delete Facility"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            
+                            {/* Navigation Actions - Icons only */}
+                            {canManageRooms && (
+                              <button
+                                onClick={() => navigate(`/rooms?facility=${facility.id}`)}
+                                className="p-1 rounded border border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+                                title="View Rooms"
+                              >
+                                <DoorClosed className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => navigate(`/leases?facility=${facility.id}`)}
+                              className="p-1 rounded border border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+                              title="View Leases"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => navigate(`/payments?facility=${facility.id}`)}
+                              className="p-1 rounded border border-yellow-500 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors"
+                              title="View Payments"
+                            >
+                              <DollarSign className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => navigate(`/renters?facility=${facility.id}`)}
+                              className="p-1 rounded border border-purple-500 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors"
+                              title="View Renters"
+                            >
+                              <UserPlus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         )}
       </div>
     </div>

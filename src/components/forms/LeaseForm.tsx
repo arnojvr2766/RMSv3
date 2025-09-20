@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Calendar, DollarSign, Save, X, User, Building2, DoorClosed } from 'lucide-react';
+import { FileText, Save, X, User, Building2, DoorClosed } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
@@ -21,7 +21,6 @@ interface Facility {
     paymentMethods: string[];
   };
   primaryColor: string;
-  billingEntity?: string;
   status: 'active' | 'inactive';
   createdAt: any;
   updatedAt: any;

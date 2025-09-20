@@ -1,7 +1,10 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from './contexts/AuthContext';
 import { RoleProvider } from './contexts/RoleContext';
 import { SettingsProvider } from './contexts/SettingsContext';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import LoginScreen from './components/auth/LoginScreen';
 import Header from './components/layout/Header';
 import Sidebar from './components/layout/Sidebar';
 import Home from './pages/Home';
@@ -16,6 +19,7 @@ import Complaints from './pages/Complaints';
 import SettingsPage from './pages/Settings';
 import PaymentApprovals from './pages/PaymentApprovals';
 import Maintenance from './pages/Maintenance';
+import SetupPassword from './pages/SetupPassword';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { useState } from 'react';
 import './index.css';
@@ -39,38 +43,50 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RoleProvider>
-        <SettingsProvider>
-          <Router>
-                 <div className="App min-h-screen bg-secondary-900">
-                   <Header onMenuToggle={toggleSidebar} />
-                   <div className="flex">
-                     <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-                     <main className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'lg:ml-80' : 'lg:ml-16'} p-6`}>
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/home" element={<Home />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/payments" element={<Payments />} />
-                  <Route path="/facilities" element={<Facilities />} />
-                  <Route path="/rooms" element={<Rooms />} />
-                  <Route path="/renters" element={<Renters />} />
-          <Route path="/leases" element={<Leases />} />
-          <Route path="/payment-approvals" element={<PaymentApprovals />} />
-          <Route path="/maintenance" element={<Maintenance />} />
-          <Route path="/penalties" element={<Penalties />} />
-          <Route path="/complaints" element={<Complaints />} />
-          <Route path="/settings" element={<SettingsPage />} />
-                </Routes>
-                     </main>
-                   </div>
-                 </div>
-                 
-                 {/* PWA Install Prompt */}
-                 <PWAInstallPrompt />
-          </Router>
-        </SettingsProvider>
-      </RoleProvider>
+      <AuthProvider>
+        <RoleProvider>
+          <SettingsProvider>
+            <Router>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/setup-password" element={<SetupPassword />} />
+                
+                {/* Protected routes */}
+                <Route path="/*" element={
+                  <ProtectedRoute>
+                    <div className="App min-h-screen bg-secondary-900">
+                      <Header onMenuToggle={toggleSidebar} />
+                      <div className="flex">
+                        <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+                        <main className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'lg:ml-80' : 'lg:ml-16'} p-6`}>
+                          <Routes>
+                            <Route path="/" element={<Home />} />
+                            <Route path="/home" element={<Home />} />
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/payments" element={<Payments />} />
+                            <Route path="/facilities" element={<Facilities />} />
+                            <Route path="/rooms" element={<Rooms />} />
+                            <Route path="/renters" element={<Renters />} />
+                            <Route path="/leases" element={<Leases />} />
+                            <Route path="/payment-approvals" element={<PaymentApprovals />} />
+                            <Route path="/maintenance" element={<Maintenance />} />
+                            <Route path="/penalties" element={<Penalties />} />
+                            <Route path="/complaints" element={<Complaints />} />
+                            <Route path="/settings" element={<SettingsPage />} />
+                          </Routes>
+                        </main>
+                      </div>
+                    </div>
+                    
+                    {/* PWA Install Prompt */}
+                    <PWAInstallPrompt />
+                  </ProtectedRoute>
+                } />
+              </Routes>
+            </Router>
+          </SettingsProvider>
+        </RoleProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

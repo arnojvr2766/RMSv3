@@ -64,12 +64,12 @@ const PWAInstallPrompt: React.FC = () => {
       <div className="flex items-start justify-between">
         <div className="flex items-center space-x-3">
           <img 
-            src="/Unitra32.png" 
-            alt="Unitra Logo" 
+            src="/RentDesk.png" 
+            alt="RentDesk Logo" 
             className="w-8 h-8 rounded"
           />
           <div>
-            <h3 className="text-white font-semibold text-sm">Install Unitra</h3>
+            <h3 className="text-white font-semibold text-sm">Install RentDesk</h3>
             <p className="text-gray-400 text-xs">
               Install this app on your device for quick access
             </p>

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Shield, Users, Building2, DoorClosed, RotateCcw, Check, Calendar, UserPlus, Mail, User, Crown, Wifi, WifiOff, Eye, Bell, Monitor, Database, Download, X, MoreVertical, Edit, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Settings, Shield, Users, Building2, DoorClosed, RotateCcw, Check, Calendar, UserPlus, Mail, User, Crown, Wifi, WifiOff, Eye, Bell, Monitor, Database, Download, X } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useRole } from '../contexts/RoleContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
-import { UserService, type CreateUserRequest, type User as UserType } from '../services/userService';
+import { userService, type CreateUserRequest } from '../services/userService';
 
 const SettingsPage: React.FC = () => {
   const { 
@@ -71,11 +71,6 @@ const SettingsPage: React.FC = () => {
   });
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [userCreationMessage, setUserCreationMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  
-  // User list state
-  const [users, setUsers] = useState<UserType[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [userActionMessage, setUserActionMessage] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   // Debug logging for settings
   useEffect(() => {
@@ -86,105 +81,6 @@ const SettingsPage: React.FC = () => {
       maxPastPaymentDays
     });
   }, [isLoading, allowStandardUserPastPayments, requireAdminApprovalForPastPayments, maxPastPaymentDays]);
-
-  // Load users when user management tab is active
-  useEffect(() => {
-    if (activeTab === 'user-management' && isSystemAdmin) {
-      loadUsers();
-    }
-  }, [activeTab, isSystemAdmin]);
-
-  const loadUsers = async () => {
-    setIsLoadingUsers(true);
-    try {
-      const userList = await UserService.getAllUsers();
-      setUsers(userList);
-    } catch (error) {
-      console.error('Error loading users:', error);
-      setUserActionMessage({
-        type: 'error',
-        message: 'Failed to load users'
-      });
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
-
-  const handleUserStatusChange = async (userId: string, newStatus: 'active' | 'disabled') => {
-    try {
-      await UserService.updateUserStatus(userId, newStatus);
-      setUserActionMessage({
-        type: 'success',
-        message: `User ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully`
-      });
-      // Reload users to reflect changes
-      await loadUsers();
-      // Hide message after 3 seconds
-      setTimeout(() => setUserActionMessage(null), 3000);
-    } catch (error) {
-      console.error('Error updating user status:', error);
-      setUserActionMessage({
-        type: 'error',
-        message: 'Failed to update user status'
-      });
-    }
-  };
-
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      try {
-        await UserService.deleteUser(userId);
-        setUserActionMessage({
-          type: 'success',
-          message: 'User deleted successfully'
-        });
-        // Reload users to reflect changes
-        await loadUsers();
-        // Hide message after 3 seconds
-        setTimeout(() => setUserActionMessage(null), 3000);
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        setUserActionMessage({
-          type: 'error',
-          message: 'Failed to delete user'
-        });
-      }
-    }
-  };
-
-  const formatDate = (date: any) => {
-    if (!date) return 'Never';
-    try {
-      const dateObj = date.toDate ? date.toDate() : new Date(date);
-      return dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
-    } catch (error) {
-      return 'Invalid date';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-500/20 text-green-400';
-      case 'pending':
-        return 'bg-yellow-500/20 text-yellow-400';
-      case 'disabled':
-        return 'bg-red-500/20 text-red-400';
-      default:
-        return 'bg-gray-500/20 text-gray-400';
-    }
-  };
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'system_admin':
-        return 'bg-primary-500/20 text-primary-400';
-      case 'standard_user':
-        return 'bg-blue-500/20 text-blue-400';
-      default:
-        return 'bg-gray-500/20 text-gray-400';
-    }
-  };
 
   const handleResetSettings = () => {
     if (confirm('Are you sure you want to reset all settings to their default values? This action cannot be undone.')) {
@@ -251,7 +147,7 @@ const SettingsPage: React.FC = () => {
         role: userFormData.role
       };
 
-      await UserService.createUserInvitation(request);
+      await userService.createUserInvitation(request);
       
       setUserCreationMessage({
         type: 'success',
@@ -404,41 +300,27 @@ const SettingsPage: React.FC = () => {
           </div>
         )}
 
-        {/* User Action Success/Error Message */}
-        {userActionMessage && (
-          <div className={`fixed top-20 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center space-x-2 z-50 ${
-            userActionMessage.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-          }`}>
-            {userActionMessage.type === 'success' ? (
-              <Check className="w-5 h-5" />
-            ) : (
-              <X className="w-5 h-5" />
-            )}
-            <span>{userActionMessage.message}</span>
-          </div>
-        )}
-
         {/* Tab Content */}
         {activeTab === 'user-management' && (
           <div className="space-y-6">
-        {/* Current Role Display */}
+            {/* Current Role Display */}
             <Card className="p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <Shield className="w-6 h-6 text-primary-500" />
-            <h2 className="text-xl font-semibold text-white">Current Role</h2>
-          </div>
-          <div className="flex items-center space-x-3">
-            <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-              isSystemAdmin 
-                ? 'bg-primary-500 text-secondary-900' 
-                : 'bg-accent-blue-500 text-white'
-            }`}>
-              {currentRole === 'system_admin' ? 'System Administrator' : 'Standard User'}
-            </div>
-            <span className="text-gray-400 text-sm">
-              {isSystemAdmin ? 'Full system access' : 'Limited access based on settings'}
-            </span>
-          </div>
+              <div className="flex items-center space-x-3 mb-4">
+                <Shield className="w-6 h-6 text-primary-500" />
+                <h2 className="text-xl font-semibold text-white">Current Role</h2>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  isSystemAdmin 
+                    ? 'bg-primary-500 text-secondary-900' 
+                    : 'bg-accent-blue-500 text-white'
+                }`}>
+                  {currentRole === 'system_admin' ? 'System Administrator' : 'Standard User'}
+                </div>
+                <span className="text-gray-400 text-sm">
+                  {isSystemAdmin ? 'Full system access' : 'Limited access based on settings'}
+                </span>
+              </div>
             </Card>
 
             {/* User Creation Section - Only visible to System Admins */}
@@ -456,7 +338,7 @@ const SettingsPage: React.FC = () => {
                     <UserPlus className="w-4 h-4" />
                     <span>{showUserCreation ? 'Cancel' : 'Create User'}</span>
                   </Button>
-        </div>
+                </div>
 
                 {showUserCreation && (
                   <div className="bg-gray-700 rounded-lg p-6">
@@ -537,132 +419,9 @@ const SettingsPage: React.FC = () => {
                 )}
               </Card>
             )}
-
-            {/* User List */}
-            {isSystemAdmin && (
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-3">
-            <Users className="w-6 h-6 text-primary-500" />
-                    <h2 className="text-xl font-semibold text-white">All Users</h2>
-                  </div>
-                  <Button
-                    onClick={loadUsers}
-                    disabled={isLoadingUsers}
-                    variant="secondary"
-                    size="sm"
-                    className="flex items-center space-x-2"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Refresh</span>
-                  </Button>
-                </div>
-
-                {isLoadingUsers ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="ml-3 text-gray-400">Loading users...</span>
-                  </div>
-                ) : users.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-400 mb-2">No Users Found</h3>
-                    <p className="text-gray-500">Create your first user using the form above.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-700">
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">User</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">Role</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">Status</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">Last Login</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">Login Count</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">Created</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-gray-300">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.map((user) => (
-                          <tr key={user.id} className="border-b border-gray-700 hover:bg-gray-700/50">
-                            <td className="py-4 px-4">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-                                  <User className="w-4 h-4 text-gray-300" />
-                                </div>
-                                <div>
-                                  <div className="text-white font-medium">
-                                    {user.firstName} {user.lastName}
-                                  </div>
-                                  <div className="text-gray-400 text-sm">{user.email}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
-                                {user.role === 'system_admin' ? 'System Admin' : 'Standard User'}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(user.status)}`}>
-                                {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 text-gray-400 text-sm">
-                              {formatDate(user.lastLoginAt)}
-                            </td>
-                            <td className="py-4 px-4 text-gray-400 text-sm">
-                              {user.loginCount || 0}
-                            </td>
-                            <td className="py-4 px-4 text-gray-400 text-sm">
-                              {formatDate(user.createdAt)}
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="flex items-center space-x-2">
-                                {user.status === 'active' ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleUserStatusChange(user.id, 'disabled')}
-                                    title="Disable User"
-                                    className="text-yellow-400 hover:text-yellow-300"
-                                  >
-                                    <UserX className="w-4 h-4" />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleUserStatusChange(user.id, 'active')}
-                                    title="Enable User"
-                                    className="text-green-400 hover:text-green-300"
-                                  >
-                                    <UserCheck className="w-4 h-4" />
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}`)}
-                                  title="Delete User"
-                                  className="text-red-400 hover:text-red-300"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Card>
-            )}
           </div>
         )}
-          
+
         {activeTab === 'payment' && (
           <div className="space-y-6">
             {/* Payment Due Date Settings */}
@@ -902,38 +661,38 @@ const SettingsPage: React.FC = () => {
                     <div>
                       <h4 className="text-white font-medium">Email Notifications</h4>
                       <p className="text-gray-400 text-sm">Receive important updates via email</p>
-                </div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
                       checked={emailNotifications}
                       onChange={(e) => handleSettingChange(setEmailNotifications, e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
-              </label>
-            </div>
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                  </label>
+                </div>
 
                 {/* Push Notifications */}
                 <div className="flex items-center justify-between p-3 bg-gray-600 rounded-lg">
-              <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-3">
                     <Bell className="w-4 h-4 text-gray-400" />
-                <div>
+                    <div>
                       <h4 className="text-white font-medium">Push Notifications</h4>
                       <p className="text-gray-400 text-sm">Receive browser push notifications</p>
-                </div>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
                       checked={pushNotifications}
                       onChange={(e) => handleSettingChange(setPushNotifications, e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
-              </label>
-            </div>
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                  </label>
+                </div>
 
                 {/* Notification Frequency */}
                 <div className="space-y-3">
@@ -960,12 +719,12 @@ const SettingsPage: React.FC = () => {
               <div className="flex items-center space-x-3 mb-6">
                 <Database className="w-6 h-6 text-primary-500" />
                 <h2 className="text-xl font-semibold text-white">Data Management</h2>
-        </div>
-
+              </div>
+              
               <div className="space-y-6">
                 {/* Export Functionality */}
                 <div className="p-6 bg-gray-700 rounded-lg border-2 border-dashed border-gray-600">
-          <div className="text-center">
+                  <div className="text-center">
                     <Download className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-400 mb-2">Export Functionality</h3>
                     <p className="text-gray-500 mb-4">

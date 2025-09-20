@@ -57,17 +57,14 @@ const Home: React.FC = () => {
         <div className="mb-8">
           <div className="flex items-center space-x-4 mb-4">
             <img 
-              src="/Unitra512.png" 
-              alt="Unitra Logo" 
+              src="/RentDesk.png" 
+              alt="RentDesk Logo" 
               className="w-16 h-16 rounded-lg"
             />
             <div>
               <h1 className="text-3xl font-bold text-white mb-2">
-                Welcome to Unitra
+                Welcome to RentDesk
               </h1>
-              <p className="text-lg text-primary-400 font-medium">
-                Units - Rent - Admin
-              </p>
             </div>
           </div>
           <p className="text-secondary">

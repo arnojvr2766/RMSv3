@@ -157,6 +157,13 @@ export interface PaymentSchedule {
       paidDate?: Timestamp;
       paymentMethod?: string;
     };
+    // Approval workflow fields
+    requiresApproval?: boolean;
+    approvedBy?: string;
+    approvedAt?: Timestamp;
+    approvalNotes?: string;
+    capturedBy?: string; // User who captured the payment
+    capturedAt?: Timestamp; // When the payment was captured
   }[];
   // Aggregated penalty system
   aggregatedPenalty?: {
@@ -739,6 +746,42 @@ export const paymentScheduleService = {
       })) as PaymentSchedule[];
     } catch (error) {
       console.error('Error getting all payment schedules:', error);
+      throw error;
+    }
+  },
+
+  // Get payment schedules for multiple leases (batch query)
+  async getPaymentSchedulesByLeases(leaseIds: string[]): Promise<PaymentSchedule[]> {
+    try {
+      if (leaseIds.length === 0) return [];
+      
+      // Firestore 'in' queries are limited to 10 items, so we need to batch them
+      const batches = [];
+      for (let i = 0; i < leaseIds.length; i += 10) {
+        const batch = leaseIds.slice(i, i + 10);
+        batches.push(batch);
+      }
+      
+      const allSchedules: PaymentSchedule[] = [];
+      
+      // Execute batches in parallel
+      const batchPromises = batches.map(async (batch) => {
+        const querySnapshot = await getDocs(
+          query(collection(db, 'payment_schedules'), where('leaseId', 'in', batch))
+        );
+        
+        return querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as PaymentSchedule[];
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      batchResults.forEach(schedules => allSchedules.push(...schedules));
+      
+      return allSchedules;
+    } catch (error) {
+      console.error('Error getting payment schedules by leases:', error);
       throw error;
     }
   },

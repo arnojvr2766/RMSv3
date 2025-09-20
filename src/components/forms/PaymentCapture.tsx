@@ -1,36 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Calendar, CreditCard, CheckCircle, X, Edit, Camera, Upload, Image, Trash2, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { DollarSign, CheckCircle, X, Edit, Camera, Upload, Image, Trash2, AlertTriangle, ChevronUp, ChevronDown, Clock } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
-import { paymentScheduleService, leaseService } from '../../services/firebaseService';
+import { paymentScheduleService, type PaymentSchedule } from '../../services/firebaseService';
 import { aggregatedPenaltyService } from '../../services/aggregatedPenaltyService';
 import PaymentEdit from './PaymentEdit';
 import CameraCapture from './CameraCapture';
 import PenaltyCalculator from './PenaltyCalculator';
 import { Timestamp } from 'firebase/firestore';
+import { usePaymentValidation } from '../../utils/paymentValidation';
 
 // Temporary inline type definitions
-interface PaymentSchedule {
-  id?: string;
-  leaseId: string;
-  facilityId: string;
-  roomId: string;
-  renterId: string;
-  payments: {
-    month: string;
-    dueDate: any;
-    amount: number;
-    type: 'rent' | 'deposit' | 'late_fee';
-    status: 'pending' | 'paid' | 'overdue' | 'partial';
-    paidAmount?: number;
-    paidDate?: any;
-    lateFee?: number;
-  }[];
-  totalAmount: number;
-  totalPaid: number;
-  outstandingAmount: number;
-}
+// PaymentSchedule type is imported from firebaseService
 
 interface LeaseAgreement {
   id?: string;
@@ -44,6 +26,11 @@ interface LeaseAgreement {
     depositAmount: number;
     depositPaid: boolean;
     depositPaidDate?: any;
+  };
+  businessRules?: {
+    lateFeeAmount: number;
+    lateFeeStartDay: number;
+    gracePeriodDays: number;
   };
   status: 'active' | 'expired' | 'terminated' | 'pending';
 }
@@ -59,6 +46,7 @@ interface PaymentCaptureProps {
 }
 
 const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCancel, preSelectedPayment }) => {
+  const { validatePayment } = usePaymentValidation();
   const [paymentSchedule, setPaymentSchedule] = useState<PaymentSchedule | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
@@ -73,6 +61,7 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [isPaymentSelectionExpanded, setIsPaymentSelectionExpanded] = useState(false);
+  const [paymentValidation, setPaymentValidation] = useState<{ isValid: boolean; requiresApproval: boolean; errorMessage?: string } | null>(null);
   
   // Penalty payment state
   const [includePenaltyPayment, setIncludePenaltyPayment] = useState(false);
@@ -82,6 +71,14 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   useEffect(() => {
     loadPaymentSchedule();
   }, [lease]);
+
+  // Validate payment date whenever it changes
+  useEffect(() => {
+    if (paymentDate) {
+      const validation = validatePayment(new Date(paymentDate));
+      setPaymentValidation(validation);
+    }
+  }, [paymentDate, validatePayment]);
 
   const loadPaymentSchedule = async () => {
     try {
@@ -166,7 +163,6 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
     // Extract year and month from keys like "2025-04"
     const parts = monthKey.split('-');
     if (parts.length === 2) {
-      const year = parts[0];
       const month = parseInt(parts[1]);
       const monthNames = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -205,13 +201,30 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
       return;
     }
 
+    // Validate payment date
+    if (paymentValidation && !paymentValidation.isValid) {
+      alert(paymentValidation.errorMessage || 'Invalid payment date.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      // Determine payment status based on validation
+      let paymentStatus: 'paid' | 'partial' | 'pending_approval';
+      if (paymentValidation && paymentValidation.requiresApproval) {
+        paymentStatus = 'pending_approval';
+      } else {
+        paymentStatus = paymentAmount >= paymentSchedule.payments.find(p => p.month === selectedPayment)?.amount! 
+          ? 'paid' : 'partial';
+      }
+
       const paymentUpdate: any = {
-        status: paymentAmount >= paymentSchedule.payments.find(p => p.month === selectedPayment)?.amount! 
-          ? 'paid' : 'partial',
+        status: paymentStatus,
         paidAmount: paymentAmount,
         paymentMethod: paymentMethod,
+        requiresApproval: paymentValidation?.requiresApproval || false,
+        capturedBy: 'current_user_id', // TODO: Get from auth context
+        capturedAt: Timestamp.now(),
       };
 
       // Only add paidDate if paymentDate is valid
@@ -301,6 +314,13 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
 
       // Reload payment schedule
       await loadPaymentSchedule();
+      
+      // Show appropriate success message
+      if (paymentValidation && paymentValidation.requiresApproval) {
+        alert('Payment captured successfully! It has been sent for admin approval.');
+      } else {
+        alert('Payment captured successfully!');
+      }
       
       onSuccess?.();
     } catch (error) {
@@ -609,13 +629,31 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
               min="0"
               required
             />
-            <Input
-              label="Payment Date"
-              type="date"
-              value={paymentDate}
-              onChange={(e) => setPaymentDate(e.target.value)}
-              required
-            />
+            <div>
+              <Input
+                label="Payment Date"
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                required
+              />
+              {paymentValidation && (
+                <div className="mt-2">
+                  {!paymentValidation.isValid && (
+                    <div className="flex items-center space-x-2 text-red-400 text-sm">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>{paymentValidation.errorMessage}</span>
+                    </div>
+                  )}
+                  {paymentValidation.isValid && paymentValidation.requiresApproval && (
+                    <div className="flex items-center space-x-2 text-yellow-400 text-sm">
+                      <Clock className="w-4 h-4" />
+                      <span>This payment will require admin approval</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Payment Method</label>
               <select
@@ -659,7 +697,7 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
         )}
 
         {/* Aggregated Penalty Payment Section */}
-        {paymentSchedule.aggregatedPenalty && paymentSchedule.aggregatedPenalty.outstandingAmount > 0 && (
+        {paymentSchedule?.aggregatedPenalty && paymentSchedule.aggregatedPenalty.outstandingAmount > 0 && (
           <Card>
             <div className="flex items-center space-x-3 mb-4">
               <AlertTriangle className="w-5 h-5 text-yellow-500" />
@@ -686,7 +724,7 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
                   onChange={(e) => {
                     setIncludePenaltyPayment(e.target.checked);
                     if (e.target.checked) {
-                      setPenaltyPaymentAmount(paymentSchedule.aggregatedPenalty.outstandingAmount);
+                      setPenaltyPaymentAmount(paymentSchedule.aggregatedPenalty?.outstandingAmount || 0);
                     } else {
                       setPenaltyPaymentAmount(0);
                     }
@@ -706,7 +744,7 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
                     value={penaltyPaymentAmount}
                     onChange={(e) => setPenaltyPaymentAmount(parseFloat(e.target.value) || 0)}
                     min="0"
-                    max={paymentSchedule.aggregatedPenalty.outstandingAmount}
+                    max={paymentSchedule.aggregatedPenalty?.outstandingAmount?.toString() || "0"}
                     placeholder="Enter penalty amount"
                   />
                   <div>

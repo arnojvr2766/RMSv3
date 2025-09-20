@@ -1,55 +1,30 @@
-import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
-import * as nodemailer from 'nodemailer';
+import React from 'react';
 
-// Initialize Firebase Admin
-admin.initializeApp();
+interface InvitationEmailTemplateProps {
+  firstName: string;
+  lastName: string;
+  role: 'system_admin' | 'standard_user';
+  invitationLink: string;
+  expiresIn: number; // days
+}
 
-// Gmail SMTP configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER || 'arnoj17@gmail.com',
-    pass: process.env.EMAIL_PASSWORD || 'wlxi tjcd jzps rvhj',
-  },
-});
-
-// Export functions
-export const helloWorld = functions.https.onRequest((request, response) => {
-  response.json({ message: 'Hello from Firebase Functions!' });
-});
-
-// Send invitation email function
-export const sendInvitationEmail = functions.https.onRequest(
-  async (request, response) => {
-    // Enable CORS
-    response.set('Access-Control-Allow-Origin', '*');
-    response.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    response.set('Access-Control-Allow-Headers', 'Content-Type');
-    
-    if (request.method === 'OPTIONS') {
-      response.status(204).send('');
-      return;
-    }
-
-    try {
-      const { firstName, lastName, email, role, invitationLink } = request.body;
-
-      if (!firstName || !lastName || !email || !role || !invitationLink) {
-        response.status(400).json({ error: 'Missing required fields' });
-        return;
-      }
-
-      const roleDisplay = role === 'system_admin' ? 'System Administrator' : 'Standard User';
-      
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Welcome to RentDesk - Set Up Your Account</title>
-          <style>
+export const InvitationEmailTemplate: React.FC<InvitationEmailTemplateProps> = ({
+  firstName,
+  lastName,
+  role,
+  invitationLink,
+  expiresIn
+}) => {
+  const roleDisplay = role === 'system_admin' ? 'System Administrator' : 'Standard User';
+  
+  return (
+    <html>
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Welcome to RentDesk - Set Up Your Account</title>
+        <style>
+          {`
             body {
               font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
               line-height: 1.6;
@@ -137,6 +112,11 @@ export const sendInvitationEmail = functions.https.onRequest(
               text-align: center;
               margin: 30px 0;
               box-shadow: 0 4px 15px rgba(255, 211, 0, 0.3);
+              transition: all 0.3s ease;
+            }
+            .cta-button:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 6px 20px rgba(255, 211, 0, 0.4);
             }
             .features {
               background-color: #f8f9fa;
@@ -198,71 +178,96 @@ export const sendInvitationEmail = functions.https.onRequest(
               margin: 0;
               font-weight: 500;
             }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <div class="logo-container">
-                <img src="https://rmsv3-becf7.web.app/RentDesk.png" alt="RentDesk Logo" class="logo">
-              </div>
-              <h1>RentDesk</h1>
+            @media (max-width: 600px) {
+              .container {
+                margin: 0;
+                border-radius: 0;
+              }
+              .header, .content, .footer {
+                padding: 30px 20px;
+              }
+              .header h1 {
+                font-size: 28px;
+              }
+              .greeting {
+                font-size: 20px;
+              }
+            }
+          `}
+        </style>
+      </head>
+      <body>
+        <div className="container">
+          {/* Header */}
+          <div className="header">
+            <div className="logo-container">
+              <img 
+                src="https://rmsv3-becf7.web.app/RentDesk.png" 
+                alt="RentDesk Logo" 
+                className="logo"
+              />
             </div>
-            <div class="content">
-              <h2 class="greeting">Welcome, ${firstName}!</h2>
-              <p class="message">
-                You've been invited to join RentDesk, our comprehensive rental management system. 
-                Your administrator has created an account for you with <strong>${roleDisplay}</strong> privileges.
-              </p>
-              <div class="role-badge">${roleDisplay}</div>
-              <div class="expiry-notice">
-                <p>⏰ This invitation expires in 7 days</p>
-              </div>
-              <div style="text-align: center;">
-                <a href="${invitationLink}" class="cta-button">Set Up Your Password</a>
-              </div>
-              <div class="features">
-                <h3>What you can do with RentDesk:</h3>
-                <ul class="feature-list">
-                  <li>Manage rental facilities and properties</li>
-                  <li>Track tenant information and lease agreements</li>
-                  <li>Process rent payments and overdue accounts</li>
-                  <li>Generate comprehensive property reports</li>
-                  <li>Configure business rules and policies</li>
-                  <li>Monitor maintenance requests and expenses</li>
-                </ul>
-              </div>
-              <p class="message">
-                Once you set up your password, you'll have full access to the RentDesk dashboard 
-                and can start managing your rental properties immediately.
-              </p>
-            </div>
-            <div class="footer">
-              <p>This invitation was sent by your RentDesk administrator.</p>
-              <p>If you didn't expect this invitation, please contact your administrator or 
-                <a href="mailto:support@rentdesk.com">support@rentdesk.com</a>
-              </p>
-              <p style="margin-top: 20px; font-size: 12px;">© 2025 RentDesk. All rights reserved.</p>
-            </div>
+            <h1>RentDesk</h1>
           </div>
-        </body>
-        </html>
-      `;
 
-      const mailOptions = {
-        from: 'RentDesk <arnoj17@gmail.com>',
-        to: email,
-        subject: 'Welcome to RentDesk - Set Up Your Account',
-        html: htmlContent,
-      };
+          {/* Content */}
+          <div className="content">
+            <h2 className="greeting">Welcome, {firstName}!</h2>
+            
+            <p className="message">
+              You've been invited to join RentDesk, our comprehensive rental management system. 
+              Your administrator has created an account for you with <strong>{roleDisplay}</strong> privileges.
+            </p>
 
-      await transporter.sendMail(mailOptions);
-      
-      console.log(`Invitation email sent to ${email}`);
-      response.json({ success: true, message: 'Email sent successfully' });
-    } catch (error) {
-      console.error('Error sending invitation email:', error);
-      response.status(500).json({ error: 'Failed to send email' });
-    }
-  }
-);
+            <div className="role-badge">
+              {roleDisplay}
+            </div>
+
+            <div className="expiry-notice">
+              <p>⏰ This invitation expires in {expiresIn} days</p>
+            </div>
+
+            <div style={{ textAlign: 'center' }}>
+              <a href={invitationLink} className="cta-button">
+                Set Up Your Password
+              </a>
+            </div>
+
+            <div className="features">
+              <h3>What you can do with RentDesk:</h3>
+              <ul className="feature-list">
+                <li>Manage rental facilities and properties</li>
+                <li>Track tenant information and lease agreements</li>
+                <li>Process rent payments and overdue accounts</li>
+                <li>Generate comprehensive property reports</li>
+                <li>Configure business rules and policies</li>
+                <li>Monitor maintenance requests and expenses</li>
+              </ul>
+            </div>
+
+            <p className="message">
+              Once you set up your password, you'll have full access to the RentDesk dashboard 
+              and can start managing your rental properties immediately.
+            </p>
+          </div>
+
+          {/* Footer */}
+          <div className="footer">
+            <p>
+              This invitation was sent by your RentDesk administrator.
+            </p>
+            <p>
+              If you didn't expect this invitation, please contact your administrator or 
+              <a href="mailto:support@rentdesk.com"> support@rentdesk.com</a>
+            </p>
+            <p style={{ marginTop: '20px', fontSize: '12px' }}>
+              © 2025 RentDesk. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </body>
+    </html>
+  );
+};
+
+export default InvitationEmailTemplate;

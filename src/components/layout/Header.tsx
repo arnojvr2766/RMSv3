@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, Settings, LogOut, Menu, Database } from 'lucide-react';
+import { Bell, Settings, LogOut, Menu, Database, User, Wifi, WifiOff } from 'lucide-react';
 import RoleToggle from '../ui/RoleToggle';
 import Button from '../ui/Button';
 import { useRole } from '../../contexts/RoleContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import DataManagement from '../forms/DataManagement';
 
 interface HeaderProps {
@@ -12,7 +14,17 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { currentRole, isSystemAdmin } = useRole();
+  const { user, signOut } = useAuth();
+  const { isOffline } = useSettings();
   const [showDataManagement, setShowDataManagement] = useState(false);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   return (
     <header className="bg-gray-800 border-b border-gray-700">
@@ -32,17 +44,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                    {/* Logo and Title */}
                    <Link to="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
                      <img 
-                       src="/Unitra1024.png" 
-                       alt="Unitra Logo" 
+                       src="/RentDesk.png" 
+                       alt="RentDesk Logo" 
                        className="w-10 h-10 rounded-lg"
                      />
                      <div>
                        <h1 className="text-xl font-bold text-white">
-                         Unitra
+                         RentDesk
                        </h1>
-                       <p className="text-xs text-secondary">
-                         Units - Rent - Admin
-                       </p>
                        <p className="text-xs text-gray-400">
                          Version 1.0.0
                        </p>
@@ -81,17 +90,58 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                 variant="ghost" 
                 size="sm"
                 onClick={() => setShowDataManagement(true)}
+                title="Data Management"
               >
                 <Database className="w-4 h-4" />
               </Button>
             )}
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" title="Notifications">
               <Bell className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm">
-              <Settings className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" size="sm">
+            
+            {/* Connection Status */}
+            <div className="flex items-center space-x-1 px-2 py-1 bg-gray-700 rounded-full">
+              {isOffline ? (
+                <>
+                  <WifiOff className="w-3 h-3 text-red-400" />
+                  <span className="text-xs text-red-400">Offline</span>
+                </>
+              ) : (
+                <>
+                  <Wifi className="w-3 h-3 text-green-400" />
+                  <span className="text-xs text-green-400">Online</span>
+                </>
+              )}
+            </div>
+            
+            <Link to="/settings">
+              <Button variant="ghost" size="sm" title="Settings">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </Link>
+            
+            {/* User Info */}
+            <div className="flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
+              {user?.photoURL ? (
+                <img 
+                  src={user.photoURL} 
+                  alt="User Avatar" 
+                  className="w-6 h-6 rounded-full"
+                />
+              ) : (
+                <User className="w-4 h-4 text-gray-400" />
+              )}
+              <span className="text-xs text-gray-300 max-w-32 truncate">
+                {user?.displayName || user?.email}
+              </span>
+            </div>
+            
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleSignOut}
+              title="Sign Out"
+            >
               <LogOut className="w-4 h-4" />
             </Button>
           </div>

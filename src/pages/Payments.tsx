@@ -16,7 +16,11 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
-  X
+  X,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Shield
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -28,6 +32,7 @@ import {
   paymentScheduleService
 } from '../services/firebaseService';
 import { overdueService } from '../services/overdueService';
+import { paymentApprovalService, type PaymentApproval } from '../services/paymentApprovalService';
 import { Timestamp } from 'firebase/firestore';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -187,6 +192,15 @@ const Payments: React.FC = () => {
   const [showPaymentEdit, setShowPaymentEdit] = useState(false);
   const [editingPayment, setEditingPayment] = useState<PaymentTransaction | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string>('');
+  
+  // Payment approval state
+  const [pendingApprovals, setPendingApprovals] = useState<PaymentApproval[]>([]);
+  const [showApprovals, setShowApprovals] = useState(false);
+  const [approvalStats, setApprovalStats] = useState<{
+    totalPending: number;
+    pendingToday: number;
+    pendingThisWeek: number;
+  }>({ totalPending: 0, pendingToday: 0, pendingThisWeek: 0 });
 
   // Check permissions
   const canManagePayments = isSystemAdmin || (currentRole === 'standard_user' && allowStandardUserRooms);
@@ -208,6 +222,13 @@ const Payments: React.FC = () => {
     
     checkOverduePayments();
   }, []);
+
+  // Load approval data for system admins
+  useEffect(() => {
+    if (isSystemAdmin) {
+      loadApprovalData();
+    }
+  }, [isSystemAdmin]);
 
   // Handle URL parameters for cross-navigation
   useEffect(() => {
@@ -231,6 +252,13 @@ const Payments: React.FC = () => {
     }
   }, [searchParams, facilities, rooms, renters]);
 
+  useEffect(() => {
+    // Reload payment transactions when date filters change
+    if (leases.length > 0 && facilities.length > 0 && rooms.length > 0 && renters.length > 0) {
+      reloadPaymentTransactions();
+    }
+  }, [dateFrom, dateTo]);
+
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -252,7 +280,7 @@ const Payments: React.FC = () => {
       const allRooms = roomsArrays.flat();
       setRooms(allRooms);
 
-      // Load payment schedules and create transactions
+      // Load payment schedules and create transactions (default to current month only)
       await loadPaymentTransactions(leasesData, facilitiesData, allRooms, rentersData);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -261,91 +289,135 @@ const Payments: React.FC = () => {
     }
   };
 
-  const loadPaymentTransactions = async (leasesData: LeaseAgreement[], facilitiesData: Facility[], roomsData: Room[], rentersData: Renter[]) => {
+  const reloadPaymentTransactions = async () => {
+    if (leases.length === 0 || facilities.length === 0 || rooms.length === 0 || renters.length === 0) {
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      const dateFilter = (dateFrom || dateTo) ? { from: dateFrom, to: dateTo } : undefined;
+      await loadPaymentTransactions(leases, facilities, rooms, renters, dateFilter);
+    } catch (error) {
+      console.error('Error reloading payment transactions:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadPaymentTransactions = async (leasesData: LeaseAgreement[], facilitiesData: Facility[], roomsData: Room[], rentersData: Renter[], dateFilter?: { from?: string, to?: string }) => {
     try {
       const transactions: PaymentTransaction[] = [];
       console.log('Loading payment transactions for', leasesData.length, 'leases');
       console.log('Available facilities:', facilitiesData.length, 'rooms:', roomsData.length, 'renters:', rentersData.length);
       
-      for (const lease of leasesData) {
-        try {
-          console.log('Fetching payment schedule for lease:', lease.id, 'facility:', lease.facilityId, 'room:', lease.roomId, 'renter:', lease.renterId);
-          const schedule = await paymentScheduleService.getPaymentScheduleByLease(lease.id);
-          if (schedule) {
-            console.log('Found payment schedule with', schedule.payments.length, 'payments for lease:', lease.id);
-            const facility = facilitiesData.find(f => f.id === lease.facilityId);
-            const room = roomsData.find(r => r.id === lease.roomId);
-            const renter = rentersData.find(r => r.id === lease.renterId);
-            
-            console.log('Found facility:', facility?.name, 'room:', room?.roomNumber, 'renter:', renter ? `${renter.personalInfo.firstName} ${renter.personalInfo.lastName}` : 'Not found');
-            
-            schedule.payments.forEach(payment => {
-              console.log('Payment data for', payment.month, ':', payment);
-              transactions.push({
-                id: `${schedule.id}_${payment.month}`,
-                leaseId: lease.id,
-                facilityId: lease.facilityId,
-                roomId: lease.roomId,
-                renterId: lease.renterId,
-                month: payment.month,
-                dueDate: payment.dueDate,
-                amount: payment.amount,
-                type: payment.type,
-                status: payment.status,
-                paidAmount: payment.paidAmount,
-                paidDate: payment.paidDate,
-                paymentMethod: payment.paymentMethod,
-                lateFee: payment.lateFee,
-                notes: payment.notes,
-                paymentProof: payment.paymentProof,
-                facilityName: facility?.name || 'Unknown Facility',
-                roomNumber: room?.roomNumber || 'Unknown Room',
-                renterName: renter ? `${renter.personalInfo.firstName} ${renter.personalInfo.lastName}` : 'Unknown Renter'
-              });
-            });
-
-            // Add aggregated penalty transaction if it exists and has been paid or has outstanding amount
-            if (schedule.aggregatedPenalty && (schedule.aggregatedPenalty.outstandingAmount > 0 || schedule.aggregatedPenalty.paidAmount > 0)) {
-              // Determine penalty status based on payment amounts
-              let penaltyStatus: 'pending' | 'paid' | 'partial' | 'overdue' = 'pending';
-              if (schedule.aggregatedPenalty.paidAmount >= schedule.aggregatedPenalty.totalAmount) {
-                penaltyStatus = 'paid';
-              } else if (schedule.aggregatedPenalty.paidAmount > 0) {
-                penaltyStatus = 'partial';
-              } else {
-                // Check if penalty is overdue based on last calculation date
-                const lastCalculated = schedule.aggregatedPenalty.lastCalculated.toDate();
-                const daysSinceCalculation = Math.floor((new Date().getTime() - lastCalculated.getTime()) / (1000 * 60 * 60 * 24));
-                penaltyStatus = daysSinceCalculation > 7 ? 'overdue' : 'pending';
-              }
-
-              transactions.push({
-                id: `${schedule.id}_penalty`,
-                leaseId: lease.id,
-                facilityId: lease.facilityId,
-                roomId: lease.roomId,
-                renterId: lease.renterId,
-                month: 'Penalties',
-                dueDate: schedule.aggregatedPenalty.lastCalculated,
-                amount: schedule.aggregatedPenalty.outstandingAmount,
-                type: 'penalty',
-                status: penaltyStatus,
-                paidAmount: schedule.aggregatedPenalty.paidAmount,
-                paidDate: undefined,
-                paymentMethod: undefined,
-                lateFee: 0,
-                notes: `Aggregated penalties - ${schedule.aggregatedPenalty.calculationHistory.length} calculations`,
-                paymentProof: undefined,
-                facilityName: facility?.name || 'Unknown Facility',
-                roomNumber: room?.roomNumber || 'Unknown Room',
-                renterName: renter ? `${renter.personalInfo.firstName} ${renter.personalInfo.lastName}` : 'Unknown Renter'
-              });
-            }
-          } else {
-            console.log('No payment schedule found for lease:', lease.id);
+      // Determine which months to load based on date filter
+      const monthsToLoad = new Set<string>();
+      if (dateFilter?.from && dateFilter?.to) {
+        // Load specific date range
+        const fromDate = new Date(dateFilter.from);
+        const toDate = new Date(dateFilter.to);
+        const current = new Date(fromDate);
+        while (current <= toDate) {
+          monthsToLoad.add(`${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`);
+          current.setMonth(current.getMonth() + 1);
+        }
+      } else {
+        // Default: load current month only
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        monthsToLoad.add(currentMonth);
+        console.log('Loading only current month:', currentMonth);
+      }
+      
+      // Get all lease IDs
+      const leaseIds = leasesData.map(lease => lease.id);
+      console.log('Fetching payment schedules for', leaseIds.length, 'leases in batch...');
+      
+      // Use batch query instead of individual calls
+      const schedules = await paymentScheduleService.getPaymentSchedulesByLeases(leaseIds);
+      console.log('Retrieved', schedules.length, 'payment schedules');
+      
+      // Create lookup maps for faster access
+      const facilityMap = new Map(facilitiesData.map(f => [f.id, f]));
+      const roomMap = new Map(roomsData.map(r => [r.id, r]));
+      const renterMap = new Map(rentersData.map(r => [r.id, r]));
+      const leaseMap = new Map(leasesData.map(l => [l.id, l]));
+      
+      for (const schedule of schedules) {
+        const lease = leaseMap.get(schedule.leaseId);
+        if (!lease) continue;
+        
+        const facility = facilityMap.get(lease.facilityId);
+        const room = roomMap.get(lease.roomId);
+        const renter = renterMap.get(lease.renterId);
+        
+        schedule.payments.forEach(payment => {
+          // Only process payments for the months we want to load
+          if (!monthsToLoad.has(payment.month)) {
+            return;
           }
-        } catch (error) {
-          console.error(`Error loading payment schedule for lease ${lease.id}:`, error);
+          
+          console.log('Processing payment for', payment.month, ':', payment);
+          transactions.push({
+            id: `${schedule.id}_${payment.month}`,
+            leaseId: lease.id,
+            facilityId: lease.facilityId,
+            roomId: lease.roomId,
+            renterId: lease.renterId,
+            month: payment.month,
+            dueDate: payment.dueDate,
+            amount: payment.amount,
+            type: payment.type,
+            status: payment.status,
+            paidAmount: payment.paidAmount,
+            paidDate: payment.paidDate,
+            paymentMethod: payment.paymentMethod,
+            lateFee: payment.lateFee,
+            notes: payment.notes,
+            paymentProof: payment.paymentProof,
+            facilityName: facility?.name || 'Unknown Facility',
+            roomNumber: room?.roomNumber || 'Unknown Room',
+            renterName: renter ? `${renter.personalInfo.firstName} ${renter.personalInfo.lastName}` : 'Unknown Renter'
+          });
+        });
+
+        // Add aggregated penalty transaction if it exists and has been paid or has outstanding amount
+        if (schedule.aggregatedPenalty && (schedule.aggregatedPenalty.outstandingAmount > 0 || schedule.aggregatedPenalty.paidAmount > 0)) {
+          // Determine penalty status based on payment amounts
+          let penaltyStatus: 'pending' | 'paid' | 'partial' | 'overdue' = 'pending';
+          if (schedule.aggregatedPenalty.paidAmount >= schedule.aggregatedPenalty.totalAmount) {
+            penaltyStatus = 'paid';
+          } else if (schedule.aggregatedPenalty.paidAmount > 0) {
+            penaltyStatus = 'partial';
+          } else {
+            // Check if penalty is overdue based on last calculation date
+            const lastCalculated = schedule.aggregatedPenalty.lastCalculated.toDate();
+            const daysSinceCalculation = Math.floor((new Date().getTime() - lastCalculated.getTime()) / (1000 * 60 * 60 * 24));
+            penaltyStatus = daysSinceCalculation > 7 ? 'overdue' : 'pending';
+          }
+
+          transactions.push({
+            id: `${schedule.id}_penalty`,
+            leaseId: lease.id,
+            facilityId: lease.facilityId,
+            roomId: lease.roomId,
+            renterId: lease.renterId,
+            month: 'Penalties',
+            dueDate: schedule.aggregatedPenalty.lastCalculated,
+            amount: schedule.aggregatedPenalty.outstandingAmount,
+            type: 'penalty',
+            status: penaltyStatus,
+            paidAmount: schedule.aggregatedPenalty.paidAmount,
+            paidDate: undefined,
+            paymentMethod: undefined,
+            lateFee: 0,
+            notes: `Aggregated penalties - ${schedule.aggregatedPenalty.calculationHistory.length} calculations`,
+            paymentProof: undefined,
+            facilityName: facility?.name || 'Unknown Facility',
+            roomNumber: room?.roomNumber || 'Unknown Room',
+            renterName: renter ? `${renter.personalInfo.firstName} ${renter.personalInfo.lastName}` : 'Unknown Renter'
+          });
         }
       }
       
@@ -598,6 +670,64 @@ const Payments: React.FC = () => {
     }
   };
 
+  // Payment approval functions
+  const loadApprovalData = async () => {
+    try {
+      const [approvals, stats] = await Promise.all([
+        paymentApprovalService.getPendingApprovals(),
+        paymentApprovalService.getApprovalStats()
+      ]);
+      
+      setPendingApprovals(approvals);
+      setApprovalStats(stats);
+    } catch (error) {
+      console.error('Error loading approval data:', error);
+    }
+  };
+
+  const handleApprovePayment = async (paymentScheduleId: string, month: string) => {
+    try {
+      const approvalNotes = prompt('Add approval notes (optional):');
+      await paymentApprovalService.approvePayment(
+        paymentScheduleId, 
+        month, 
+        'current_user_id', // TODO: Get from auth context
+        approvalNotes || undefined
+      );
+      
+      alert('Payment approved successfully!');
+      await loadApprovalData(); // Reload approval data
+      await loadData(); // Reload payment transactions
+    } catch (error) {
+      console.error('Error approving payment:', error);
+      alert('Failed to approve payment. Please try again.');
+    }
+  };
+
+  const handleRejectPayment = async (paymentScheduleId: string, month: string) => {
+    try {
+      const rejectionNotes = prompt('Add rejection notes (required):');
+      if (!rejectionNotes?.trim()) {
+        alert('Rejection notes are required.');
+        return;
+      }
+      
+      await paymentApprovalService.rejectPayment(
+        paymentScheduleId, 
+        month, 
+        'current_user_id', // TODO: Get from auth context
+        rejectionNotes
+      );
+      
+      alert('Payment rejected successfully!');
+      await loadApprovalData(); // Reload approval data
+      await loadData(); // Reload payment transactions
+    } catch (error) {
+      console.error('Error rejecting payment:', error);
+      alert('Failed to reject payment. Please try again.');
+    }
+  };
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -605,7 +735,7 @@ const Payments: React.FC = () => {
       case 'pending': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       case 'overdue': return 'bg-red-500/20 text-red-400 border-red-500/30';
       case 'partial': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'pending_approval': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'pending_approval': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     }
   };
@@ -890,6 +1020,196 @@ const Payments: React.FC = () => {
                 </div>
               </div>
 
+              {/* Month Selector */}
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-blue-400 font-medium">Month Selection</h4>
+                  <span className="text-sm text-gray-400">
+                    {!dateFrom && !dateTo ? 'Current month only' : 'Custom date range'}
+                  </span>
+                </div>
+                
+                <div className="space-y-3">
+                  {/* Year Selection */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-400">Year:</span>
+                    <div className="flex space-x-2">
+                      {[2024, 2025, 2026].map(year => {
+                        // Check if this year is selected (full year range)
+                        let isYearSelected = false;
+                        if (dateFrom && dateTo) {
+                          // Convert date strings to YYYY-MM-DD format for comparison
+                          const fromDateStr = dateFrom.split('T')[0]; // Remove time part if present
+                          const toDateStr = dateTo.split('T')[0]; // Remove time part if present
+                          
+                          const firstDayStr = `${year}-01-01`;
+                          const lastDayStr = `${year}-12-31`;
+                          
+                          // Debug logging for year 2025
+                          if (year === 2025) {
+                            console.log('2025 year selection check:', {
+                              dateFrom,
+                              dateTo,
+                              fromDateStr,
+                              toDateStr,
+                              firstDayStr,
+                              lastDayStr,
+                              fromMatch: fromDateStr === firstDayStr,
+                              toMatch: toDateStr === lastDayStr
+                            });
+                          }
+                          
+                          isYearSelected = fromDateStr === firstDayStr && toDateStr === lastDayStr;
+                        }
+                        
+                        return (
+                          <button
+                            key={year}
+                            onClick={() => {
+                              // Set to first day of selected year
+                              const firstDayStr = `${year}-01-01`;
+                              const lastDayStr = `${year}-12-31`;
+                              setDateFrom(firstDayStr);
+                              setDateTo(lastDayStr);
+                            }}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                              isYearSelected
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            }`}
+                          >
+                            {year}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Month Badges */}
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: 'Jan', month: 0 },
+                      { name: 'Feb', month: 1 },
+                      { name: 'Mar', month: 2 },
+                      { name: 'Apr', month: 3 },
+                      { name: 'May', month: 4 },
+                      { name: 'Jun', month: 5 },
+                      { name: 'Jul', month: 6 },
+                      { name: 'Aug', month: 7 },
+                      { name: 'Sep', month: 8 },
+                      { name: 'Oct', month: 9 },
+                      { name: 'Nov', month: 10 },
+                      { name: 'Dec', month: 11 }
+                    ].map(({ name, month }) => {
+                      const currentYear = new Date().getFullYear();
+                      console.log(`Processing ${name} (month ${month}), currentYear: ${currentYear}`);
+                      const isCurrentMonth = !dateFrom && !dateTo && new Date().getMonth() === month;
+                      
+                      // Check if this month is selected (full month range)
+                      let isSelected = false;
+                      if (dateFrom && dateTo) {
+                        // Convert date strings to YYYY-MM-DD format for comparison
+                        const fromDateStr = dateFrom.split('T')[0]; // Remove time part if present
+                        const toDateStr = dateTo.split('T')[0]; // Remove time part if present
+                        
+                        const firstDayStr = `${currentYear}-${String(month + 1).padStart(2, '0')}-01`;
+                        const lastDayStr = `${currentYear}-${String(month + 1).padStart(2, '0')}-${new Date(currentYear, month + 1, 0).getDate()}`;
+                        
+                        // Debug logging
+                        if (month === 9) { // October (0-indexed)
+                          console.log('October selection check:', {
+                            dateFrom,
+                            dateTo,
+                            fromDateStr,
+                            toDateStr,
+                            firstDayStr,
+                            lastDayStr,
+                            fromMatch: fromDateStr === firstDayStr,
+                            toMatch: toDateStr === lastDayStr
+                          });
+                        }
+                        
+                        // Check if the date range exactly matches this month
+                        isSelected = fromDateStr === firstDayStr && toDateStr === lastDayStr;
+                      }
+                      
+                      return (
+                        <button
+                          key={name}
+                          onClick={() => {
+                            // Fix: Use proper month calculation
+                            const firstDay = new Date(currentYear, month, 1);
+                            // Get the last day of the month by going to the first day of next month and subtracting 1 day
+                            const lastDay = new Date(currentYear, month + 1, 0);
+                            
+                            // Convert to local date strings to avoid timezone issues
+                            const firstDayStr = `${currentYear}-${String(month + 1).padStart(2, '0')}-01`;
+                            const lastDayStr = `${currentYear}-${String(month + 1).padStart(2, '0')}-${lastDay.getDate()}`;
+                            
+                            console.log(`Setting ${name} dates:`, {
+                              month,
+                              currentYear,
+                              firstDay: firstDayStr,
+                              lastDay: lastDayStr,
+                              originalFirstDay: firstDay.toISOString().split('T')[0],
+                              originalLastDay: lastDay.toISOString().split('T')[0]
+                            });
+                            
+                            setDateFrom(firstDayStr);
+                            setDateTo(lastDayStr);
+                          }}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            isCurrentMonth
+                              ? 'bg-yellow-500 text-black'
+                              : isSelected
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Quick Actions */}
+                  <div className="flex items-center space-x-2 pt-2 border-t border-gray-600">
+                    <span className="text-sm text-gray-400">Quick:</span>
+                    <button
+                      onClick={() => {
+                        setDateFrom('');
+                        setDateTo('');
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        !dateFrom && !dateTo
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Current Only
+                    </button>
+                    <button
+                      onClick={() => {
+                        const now = new Date();
+                        const firstDay = new Date(now.getFullYear(), 0, 1);
+                        const lastDay = new Date(now.getFullYear(), 11, 31);
+                        setDateFrom(firstDay.toISOString().split('T')[0]);
+                        setDateTo(lastDay.toISOString().split('T')[0]);
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        dateFrom && dateTo && 
+                        dateFrom === `${new Date().getFullYear()}-01-01` && 
+                        dateTo === `${new Date().getFullYear()}-12-31`
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      All Year
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Date Range and Search */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Date From */}
@@ -936,15 +1256,33 @@ const Payments: React.FC = () => {
         {/* Transactions Table */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">
-              Payment Transactions ({filteredTransactions.length})
-            </h2>
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Payment Transactions ({filteredTransactions.length})
+              </h2>
+              <p className="text-sm text-gray-400 mt-1">
+                {!dateFrom && !dateTo 
+                  ? `Showing current month (${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}) only. Use month selector below to view other periods.`
+                  : `Showing custom date range: ${dateFrom ? new Date(dateFrom).toLocaleDateString() : 'Start'} to ${dateTo ? new Date(dateTo).toLocaleDateString() : 'End'}`
+                }
+              </p>
+            </div>
             <div className="flex items-center space-x-2">
+              {isSystemAdmin && (
+                <Button 
+                  variant={showApprovals ? "default" : "ghost"} 
+                  size="sm" 
+                  onClick={() => setShowApprovals(!showApprovals)}
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Approvals ({approvalStats.totalPending})
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={handleCheckOverdue}>
                 <Calendar className="w-4 h-4 mr-2" />
                 Check Overdue
               </Button>
-              <Button variant="ghost" size="sm" onClick={loadData}>
+              <Button variant="ghost" size="sm" onClick={reloadPaymentTransactions}>
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Refresh
               </Button>
@@ -958,7 +1296,9 @@ const Payments: React.FC = () => {
               <p className="text-gray-400">
                 {paymentTransactions.length === 0 
                   ? 'No payment transactions have been recorded yet.'
-                  : 'No transactions match your current filters.'
+                  : !dateFrom && !dateTo 
+                    ? 'No transactions found for the current month. Try setting date filters to view more data.'
+                    : 'No transactions match your current filters.'
                 }
               </p>
             </div>
@@ -1160,6 +1500,116 @@ const Payments: React.FC = () => {
             </div>
           )}
         </Card>
+
+        {/* Payment Approvals Section */}
+        {showApprovals && isSystemAdmin && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Payment Approvals ({pendingApprovals.length})
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  Review and approve payments captured by standard users with past dates
+                </p>
+              </div>
+              <div className="flex items-center space-x-4 text-sm text-gray-400">
+                <div className="flex items-center space-x-1">
+                  <Clock className="w-4 h-4" />
+                  <span>Today: {approvalStats.pendingToday}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Calendar className="w-4 h-4" />
+                  <span>This Week: {approvalStats.pendingThisWeek}</span>
+                </div>
+              </div>
+            </div>
+
+            {pendingApprovals.length === 0 ? (
+              <div className="text-center py-12">
+                <Shield className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-400 mb-2">No Pending Approvals</h3>
+                <p className="text-gray-500">All payments have been reviewed and approved.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Facility</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Room</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Renter</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Month</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Amount</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Payment Date</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Captured By</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Captured At</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingApprovals.map((approval) => {
+                      const facility = facilities.find(f => f.id === approval.facilityId);
+                      const room = rooms.find(r => r.id === approval.roomId);
+                      const renter = renters.find(r => r.id === approval.renterId);
+                      
+                      return (
+                        <tr key={approval.id} className="border-b border-gray-700 hover:bg-gray-700/20">
+                          <td className="py-3 px-4 text-white">
+                            {facility?.name || 'Unknown Facility'}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            {room?.roomNumber || 'Unknown Room'}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            {renter ? `${renter.firstName} ${renter.lastName}` : 'Unknown Renter'}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            {approval.month}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            R{approval.paidAmount.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            {approval.paidDate.toDate().toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            {approval.capturedBy}
+                          </td>
+                          <td className="py-3 px-4 text-white">
+                            {approval.capturedAt.toDate().toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleApprovePayment(approval.paymentScheduleId, approval.month)}
+                                className="text-green-400 hover:text-green-300 hover:bg-green-500/20"
+                              >
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRejectPayment(approval.paymentScheduleId, approval.month)}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/20"
+                              >
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Quick Payment Capture Modal */}
         {showQuickPaymentCapture && (

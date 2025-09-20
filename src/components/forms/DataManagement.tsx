@@ -6,9 +6,7 @@ import {
   roomService, 
   renterService, 
   leaseService, 
-  paymentScheduleService,
-  depositPayoutService,
-  maintenanceExpenseService
+  paymentScheduleService
 } from '../../services/firebaseService';
 import { aggregatedPenaltyService } from '../../services/aggregatedPenaltyService';
 import { Timestamp, collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
@@ -23,7 +21,6 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
   const [isSeeding, setIsSeeding] = useState(false);
   const [clearComplete, setClearComplete] = useState(false);
   const [seedComplete, setSeedComplete] = useState(false);
-  const [seedProgress, setSeedProgress] = useState(0);
 
   // Clear all data
   const handleClearData = async () => {
@@ -79,18 +76,59 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
     }
   };
 
+  // Clear user data (except admin)
+  const handleClearUserData = async () => {
+    if (!confirm('⚠️ WARNING: This will permanently delete ALL user data except the admin user. This action cannot be undone. Are you sure?')) {
+      return;
+    }
+
+    setIsClearing(true);
+    setClearComplete(false);
+
+    try {
+      console.log('Clearing user data (preserving admin)...');
+      
+      // Get all users from Firestore
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      
+      let deletedCount = 0;
+      const deletePromises = [];
+
+      for (const docSnapshot of usersSnapshot.docs) {
+        const userData = docSnapshot.data();
+        
+        // Skip admin user
+        if (userData.email === 'admin@unitra.com') {
+          console.log('Preserving admin user:', userData.email);
+          continue;
+        }
+        
+        // Delete user document
+        deletePromises.push(deleteDoc(doc(db, 'users', docSnapshot.id)));
+        deletedCount++;
+        console.log(`Marked for deletion: ${userData.email}`);
+      }
+      
+      // Execute deletions
+      await Promise.all(deletePromises);
+      
+      console.log(`Successfully deleted ${deletedCount} user documents`);
+      setClearComplete(true);
+    } catch (error) {
+      console.error('Error clearing user data:', error);
+      alert('Failed to clear user data. Please try again.');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const handleCalculatePenalties = async () => {
     try {
       setIsSeeding(true);
-      setSeedProgress(0);
-      
       console.log('Starting penalty calculation...');
-      setSeedProgress(20);
       
       // Calculate daily penalties for all active leases
       await aggregatedPenaltyService.calculateDailyPenalties();
-      
-      setSeedProgress(100);
       alert('Penalty calculation completed! Check the payment transactions to see aggregated penalties.');
       
     } catch (error) {
@@ -113,61 +151,99 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
     try {
       console.log('Creating test data...');
 
-      // Create facilities
+      // Create 5 facilities in KZN area (3 RBR, 2 Yakaza)
       const facilitiesData = [
+        // RBR Facilities
         {
-          name: 'Yakaza',
-          address: '12 Yakaza Road, Johannesburg, 2001',
-          primaryColor: '#6366f1',
+          name: 'RBR Durban Central',
+          address: '45 Smith Street, Durban Central, 4001',
+          primaryColor: '#10b981',
           contactInfo: {
-            phone: '+27 11 123 4567',
-            email: 'info@yakaza.com',
-            website: 'www.yakaza.com'
+            phone: '+27 31 456 7890',
+            email: 'durban@rbr.co.za'
           },
           defaultBusinessRules: {
-            lateFeeAmount: 250,
+            lateFeeAmount: 50,
             lateFeeStartDay: 5,
-            childSurcharge: 200,
+            childSurcharge: 10,
             gracePeriodDays: 3,
             paymentMethods: ['bank_transfer', 'eft', 'cash']
           },
-          billingEntity: 'Yakaza Properties (Pty) Ltd'
+          billingEntity: 'RBR Holdings Ltd',
+          status: 'active'
         },
         {
-          name: 'RBM',
-          address: '45 RBM Street, Cape Town, 8001',
-          primaryColor: '#10b981',
+          name: 'RBR Umhlanga',
+          address: '12 Lighthouse Road, Umhlanga Rocks, 4320',
+          primaryColor: '#059669',
           contactInfo: {
-            phone: '+27 21 456 7890',
-            email: 'rentals@rbm.co.za',
-            website: 'www.rbm.co.za'
+            phone: '+27 31 567 8901',
+            email: 'umhlanga@rbr.co.za'
           },
           defaultBusinessRules: {
-            lateFeeAmount: 300,
-            lateFeeStartDay: 7,
-            childSurcharge: 150,
-            gracePeriodDays: 5,
-            paymentMethods: ['bank_transfer', 'eft', 'debit_card']
+            lateFeeAmount: 50,
+            lateFeeStartDay: 5,
+            childSurcharge: 10,
+            gracePeriodDays: 3,
+            paymentMethods: ['bank_transfer', 'eft', 'cash']
           },
-          billingEntity: 'RBM Holdings Ltd'
+          billingEntity: 'RBR Holdings Ltd',
+          status: 'active'
         },
         {
-          name: 'Test Facility',
-          address: '123 Test Avenue, Durban, 4001',
-          primaryColor: '#f59e0b',
+          name: 'RBR Pinetown',
+          address: '78 Kingsway, Pinetown, 3610',
+          primaryColor: '#047857',
+          contactInfo: {
+            phone: '+27 31 678 9012',
+            email: 'pinetown@rbr.co.za'
+          },
+          defaultBusinessRules: {
+            lateFeeAmount: 50,
+            lateFeeStartDay: 5,
+            childSurcharge: 10,
+            gracePeriodDays: 3,
+            paymentMethods: ['bank_transfer', 'eft', 'cash']
+          },
+          billingEntity: 'RBR Holdings Ltd',
+          status: 'active'
+        },
+        // Yakaza Facilities
+        {
+          name: 'Yakaza Westville',
+          address: '23 Jan Hofmeyr Road, Westville, 3629',
+          primaryColor: '#6366f1',
           contactInfo: {
             phone: '+27 31 789 0123',
-            email: 'admin@testfacility.com',
-            website: 'www.testfacility.com'
+            email: 'westville@yakaza.co.za'
           },
           defaultBusinessRules: {
-            lateFeeAmount: 200,
-            lateFeeStartDay: 3,
-            childSurcharge: 100,
-            gracePeriodDays: 2,
-            paymentMethods: ['bank_transfer', 'cash']
+            lateFeeAmount: 50,
+            lateFeeStartDay: 5,
+            childSurcharge: 10,
+            gracePeriodDays: 3,
+            paymentMethods: ['bank_transfer', 'eft', 'cash']
           },
-          billingEntity: 'Test Facility Management'
+          billingEntity: 'Yakaza Properties (Pty) Ltd',
+          status: 'active'
+        },
+        {
+          name: 'Yakaza Amanzimtoti',
+          address: '56 Beach Road, Amanzimtoti, 4125',
+          primaryColor: '#4f46e5',
+          contactInfo: {
+            phone: '+27 31 890 1234',
+            email: 'amanzimtoti@yakaza.co.za'
+          },
+          defaultBusinessRules: {
+            lateFeeAmount: 50,
+            lateFeeStartDay: 5,
+            childSurcharge: 10,
+            gracePeriodDays: 3,
+            paymentMethods: ['bank_transfer', 'eft', 'cash']
+          },
+          billingEntity: 'Yakaza Properties (Pty) Ltd',
+          status: 'active'
         }
       ];
 
@@ -178,36 +254,45 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
         console.log(`Created facility: ${facilityData.name}`);
       }
 
-      // Create rooms for each facility
-      const roomsData = [
-        // Yakaza rooms
-        { roomNumber: 'Y001', monthlyRent: 1200, type: 'single' },
-        { roomNumber: 'Y002', monthlyRent: 1500, type: 'double' },
-        { roomNumber: 'Y003', monthlyRent: 800, type: 'single' },
-        // RBM rooms
-        { roomNumber: 'R101', monthlyRent: 1700, type: 'family' },
-        { roomNumber: 'R102', monthlyRent: 900, type: 'single' },
-        { roomNumber: 'R103', monthlyRent: 1300, type: 'double' },
-        // Test Facility rooms
-        { roomNumber: 'T201', monthlyRent: 500, type: 'studio' },
-        { roomNumber: 'T202', monthlyRent: 1100, type: 'single' },
-        { roomNumber: 'T203', monthlyRent: 1400, type: 'double' }
-      ];
-
+      // Create rooms for each facility (10-20 rooms per facility)
       const createdRooms = [];
       let roomIndex = 0;
       
       for (const facility of createdFacilities) {
-        for (let i = 0; i < 3; i++) {
-          const roomData = roomsData[roomIndex];
+        // Generate random number of rooms between 10-20
+        const numRooms = Math.floor(Math.random() * 11) + 10; // 10-20 rooms
+        
+        for (let i = 1; i <= numRooms; i++) {
+          // Generate room types with realistic distribution
+          const roomTypes = ['single', 'single', 'single', 'double', 'double', 'family']; // More singles
+          const roomType = roomTypes[Math.floor(Math.random() * roomTypes.length)] as 'single' | 'double' | 'family' | 'studio';
+          
+          // Generate rent between R750-R1800
+          const monthlyRent = Math.floor(Math.random() * 1051) + 750; // 750-1800
+          
+          // Determine room status: 40-95% occupied, 2% maintenance, rest available
+          const rand = Math.random();
+          let status: 'available' | 'occupied' | 'maintenance';
+          if (rand < 0.02) {
+            status = 'maintenance';
+          } else if (rand < 0.85) { // 83% occupied (40-95% range, average ~85%)
+            status = 'occupied';
+          } else {
+            status = 'available';
+          }
+          
+          // Generate room number based on facility
+          const facilityPrefix = facility.name.includes('RBR') ? 'R' : 'Y';
+          const roomNumber = `${facilityPrefix}${String(i).padStart(3, '0')}`;
+          
           const room = {
             facilityId: facility.id,
-            roomNumber: roomData.roomNumber,
-            type: roomData.type as 'single' | 'double' | 'family' | 'studio',
-            capacity: roomData.type === 'family' ? 4 : roomData.type === 'double' ? 2 : 1,
-            monthlyRent: roomData.monthlyRent,
-            depositAmount: roomData.monthlyRent * 2, // 2 months deposit
-            amenities: ['wifi', 'electricity', 'water'],
+            roomNumber: roomNumber,
+            type: roomType,
+            capacity: roomType === 'family' ? 4 : roomType === 'double' ? 2 : 1,
+            monthlyRent: monthlyRent,
+            depositAmount: monthlyRent * 2, // 2 months deposit
+            amenities: ['wifi', 'electricity', 'water', 'parking'],
             businessRules: {
               usesFacilityDefaults: true,
               lateFeeAmount: facility.defaultBusinessRules.lateFeeAmount,
@@ -216,10 +301,10 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
               gracePeriodDays: facility.defaultBusinessRules.gracePeriodDays,
               paymentMethods: facility.defaultBusinessRules.paymentMethods
             },
-            status: i === 2 ? 'available' as const : 'occupied' as const, // Leave last room of each facility available
-            description: `${roomData.type.charAt(0).toUpperCase() + roomData.type.slice(1)} room with modern amenities`,
-            floorLevel: Math.floor(i / 2) + 1,
-            squareMeters: roomData.type === 'family' ? 45 : roomData.type === 'double' ? 30 : 20
+            status: status,
+            description: `${roomType.charAt(0).toUpperCase() + roomType.slice(1)} room with modern amenities in ${facility.name}`,
+            floorLevel: Math.floor((i - 1) / 5) + 1, // 5 rooms per floor
+            squareMeters: roomType === 'family' ? 45 : roomType === 'double' ? 30 : 20
           };
 
           const roomId = await roomService.createRoom(room);
@@ -229,21 +314,45 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
         }
       }
 
-      // Create renters for occupied rooms (8 renters total)
-      const rentersData = [
-        { firstName: 'John', lastName: 'Smith', idNumber: '8501234567081', email: 'john.smith@email.com', phone: '+27 83 123 4567' },
-        { firstName: 'Sarah', lastName: 'Johnson', idNumber: '9203456789082', email: 'sarah.j@email.com', phone: '+27 84 234 5678' },
-        { firstName: 'Michael', lastName: 'Brown', idNumber: '7805678901083', email: 'mike.brown@email.com', phone: '+27 85 345 6789' },
-        { firstName: 'Lisa', lastName: 'Davis', idNumber: '8807890123084', email: 'lisa.davis@email.com', phone: '+27 86 456 7890' },
-        { firstName: 'David', lastName: 'Wilson', idNumber: '9109012345085', email: 'david.w@email.com', phone: '+27 87 567 8901' },
-        { firstName: 'Emma', lastName: 'Taylor', idNumber: '8512345678086', email: 'emma.taylor@email.com', phone: '+27 82 678 9012' },
-        { firstName: 'James', lastName: 'Anderson', idNumber: '7734567890087', email: 'james.a@email.com', phone: '+27 83 789 0123' },
-        { firstName: 'Sophie', lastName: 'Martinez', idNumber: '9256789012088', email: 'sophie.m@email.com', phone: '+27 84 890 1234' }
+      // Create renters for occupied rooms with realistic South African names
+      const southAfricanNames = [
+        { firstName: 'Thabo', lastName: 'Mthembu', idNumber: '8501234567081', email: 'thabo.mthembu@gmail.com', phone: '+27 83 123 4567' },
+        { firstName: 'Nomsa', lastName: 'Dlamini', idNumber: '9203456789082', email: 'nomsa.dlamini@gmail.com', phone: '+27 84 234 5678' },
+        { firstName: 'Sipho', lastName: 'Nkosi', idNumber: '7805678901083', email: 'sipho.nkosi@gmail.com', phone: '+27 85 345 6789' },
+        { firstName: 'Lerato', lastName: 'Molefe', idNumber: '8807890123084', email: 'lerato.molefe@gmail.com', phone: '+27 86 456 7890' },
+        { firstName: 'Mandla', lastName: 'Zulu', idNumber: '9109012345085', email: 'mandla.zulu@gmail.com', phone: '+27 87 567 8901' },
+        { firstName: 'Zanele', lastName: 'Mthembu', idNumber: '8512345678086', email: 'zanele.mthembu@gmail.com', phone: '+27 82 678 9012' },
+        { firstName: 'Bongani', lastName: 'Ngcobo', idNumber: '7734567890087', email: 'bongani.ngcobo@gmail.com', phone: '+27 83 789 0123' },
+        { firstName: 'Ntombi', lastName: 'Mkhize', idNumber: '9256789012088', email: 'ntombi.mkhize@gmail.com', phone: '+27 84 890 1234' },
+        { firstName: 'Sibusiso', lastName: 'Mthembu', idNumber: '8501234567089', email: 'sibusiso.mthembu@gmail.com', phone: '+27 83 123 4568' },
+        { firstName: 'Nomvula', lastName: 'Dlamini', idNumber: '9203456789090', email: 'nomvula.dlamini@gmail.com', phone: '+27 84 234 5679' },
+        { firstName: 'Mthunzi', lastName: 'Nkosi', idNumber: '7805678901091', email: 'mthunzi.nkosi@gmail.com', phone: '+27 85 345 6790' },
+        { firstName: 'Thandeka', lastName: 'Molefe', idNumber: '8807890123092', email: 'thandeka.molefe@gmail.com', phone: '+27 86 456 7891' },
+        { firstName: 'Sizwe', lastName: 'Zulu', idNumber: '9109012345093', email: 'sizwe.zulu@gmail.com', phone: '+27 87 567 8902' },
+        { firstName: 'Nokuthula', lastName: 'Mthembu', idNumber: '8512345678094', email: 'nokuthula.mthembu@gmail.com', phone: '+27 82 678 9013' },
+        { firstName: 'Mfundo', lastName: 'Ngcobo', idNumber: '7734567890095', email: 'mfundo.ngcobo@gmail.com', phone: '+27 83 789 0124' },
+        { firstName: 'Nomsa', lastName: 'Mkhize', idNumber: '9256789012096', email: 'nomsa.mkhize@gmail.com', phone: '+27 84 890 1235' },
+        { firstName: 'Thulani', lastName: 'Mthembu', idNumber: '8501234567097', email: 'thulani.mthembu@gmail.com', phone: '+27 83 123 4569' },
+        { firstName: 'Nokwanda', lastName: 'Dlamini', idNumber: '9203456789098', email: 'nokwanda.dlamini@gmail.com', phone: '+27 84 234 5680' },
+        { firstName: 'Mxolisi', lastName: 'Nkosi', idNumber: '7805678901099', email: 'mxolisi.nkosi@gmail.com', phone: '+27 85 345 6791' },
+        { firstName: 'Nomsa', lastName: 'Molefe', idNumber: '8807890123100', email: 'nomsa.molefe@gmail.com', phone: '+27 86 456 7892' },
+        { firstName: 'Sipho', lastName: 'Zulu', idNumber: '9109012345101', email: 'sipho.zulu@gmail.com', phone: '+27 87 567 8903' },
+        { firstName: 'Lerato', lastName: 'Mthembu', idNumber: '8512345678102', email: 'lerato.mthembu@gmail.com', phone: '+27 82 678 9014' },
+        { firstName: 'Mandla', lastName: 'Ngcobo', idNumber: '7734567890103', email: 'mandla.ngcobo@gmail.com', phone: '+27 83 789 0125' },
+        { firstName: 'Zanele', lastName: 'Mkhize', idNumber: '9256789012104', email: 'zanele.mkhize@gmail.com', phone: '+27 84 890 1236' },
+        { firstName: 'Bongani', lastName: 'Mthembu', idNumber: '8501234567105', email: 'bongani.mthembu@gmail.com', phone: '+27 83 123 4570' },
+        { firstName: 'Ntombi', lastName: 'Dlamini', idNumber: '9203456789106', email: 'ntombi.dlamini@gmail.com', phone: '+27 84 234 5681' },
+        { firstName: 'Sibusiso', lastName: 'Nkosi', idNumber: '7805678901107', email: 'sibusiso.nkosi@gmail.com', phone: '+27 85 345 6792' },
+        { firstName: 'Nomvula', lastName: 'Molefe', idNumber: '8807890123108', email: 'nomvula.molefe@gmail.com', phone: '+27 86 456 7893' },
+        { firstName: 'Mthunzi', lastName: 'Zulu', idNumber: '9109012345109', email: 'mthunzi.zulu@gmail.com', phone: '+27 87 567 8904' },
+        { firstName: 'Thandeka', lastName: 'Mthembu', idNumber: '8512345678110', email: 'thandeka.mthembu@gmail.com', phone: '+27 82 678 9015' }
       ];
 
       const createdRenters = [];
-      for (let i = 0; i < rentersData.length; i++) {
-        const renterData = rentersData[i];
+      const occupiedRooms = createdRooms.filter(room => room.status === 'occupied');
+      
+      for (let i = 0; i < occupiedRooms.length; i++) {
+        const renterData = southAfricanNames[i % southAfricanNames.length];
         const renter = {
           personalInfo: {
             firstName: renterData.firstName,
@@ -254,31 +363,32 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
             email: renterData.email,
             emergencyContact: {
               name: `${renterData.firstName} Emergency Contact`,
-              phone: '+27 11 000 000' + i
+              phone: '+27 11 000 000' + i,
+              relationship: 'Family'
             }
           },
-          addressInfo: {
-            street: `${i + 1} Test Street`,
-            city: 'Johannesburg',
-            province: 'Gauteng',
-            postalCode: '2000'
+          address: {
+            street: `${i + 1} Main Road`,
+            city: 'Durban',
+            province: 'KwaZulu-Natal',
+            postalCode: '4000'
           },
-          employmentInfo: {
-            employer: `Company ${i + 1}`,
-            position: 'Employee',
-            workPhone: '+27 11 111 111' + i,
-            monthlyIncome: 15000 + (i * 2000)
+          employment: {
+            employer: ['Shoprite', 'Pick n Pay', 'Woolworths', 'Spar', 'Checkers', 'Sasol', 'Anglo American', 'MTN', 'Vodacom', 'Standard Bank'][i % 10],
+            position: ['Cashier', 'Sales Assistant', 'Manager', 'Driver', 'Security Guard', 'Cleaner', 'Receptionist', 'Technician', 'Supervisor', 'Assistant Manager'][i % 10],
+            workPhone: '+27 31 111 111' + i,
+            monthlyIncome: Math.floor(Math.random() * 15000) + 8000 // R8000-R23000
           },
-          bankingInfo: {
+          bankDetails: {
+            accountHolder: `${renterData.firstName} ${renterData.lastName}`,
             bankName: 'Standard Bank',
             accountNumber: '12345678' + i,
             branchCode: '051001'
           },
-          documentsInfo: {
-            idCopyProvided: true,
-            proofOfIncomeProvided: true,
-            bankStatementsProvided: true,
-            referencesProvided: true
+          documents: {
+            idCopy: 'provided',
+            proofOfIncome: 'provided',
+            bankStatement: 'provided'
           },
           status: 'active' as const
         };
@@ -288,25 +398,28 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
         console.log(`Created renter: ${renterData.firstName} ${renterData.lastName}`);
       }
 
-      // Create lease agreements for occupied rooms (2 per facility = 6 total)
-      const occupiedRooms = createdRooms.filter(room => room.status === 'occupied');
-      
+      // Create lease agreements for occupied rooms
       for (let i = 0; i < occupiedRooms.length; i++) {
         const room = occupiedRooms[i];
         const renter = createdRenters[i];
         const facility = createdFacilities.find(f => f.id === room.facilityId)!;
 
+        // Generate random start date within 2025 (Jan-Dec)
+        const startMonth = Math.floor(Math.random() * 12); // 0-11 (Jan-Dec)
+        const startDate = new Date(2025, startMonth, Math.floor(Math.random() * 28) + 1); // Random day in month
+        const endDate = new Date(2025, 11, 31); // December 31, 2025
+        
         const lease = {
           facilityId: room.facilityId,
           roomId: room.id,
           renterId: renter.id,
           terms: {
-            startDate: Timestamp.fromDate(new Date(2025, 0, 1)), // January 1, 2025
-            endDate: Timestamp.fromDate(new Date(2025, 11, 31)), // December 31, 2025
+            startDate: Timestamp.fromDate(startDate),
+            endDate: Timestamp.fromDate(endDate),
             monthlyRent: room.monthlyRent,
             depositAmount: room.depositAmount,
             depositPaid: true,
-            depositPaidDate: Timestamp.fromDate(new Date(2024, 11, 15)) // Paid in December 2024
+            depositPaidDate: Timestamp.fromDate(new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000)) // Paid 1 week before start
           },
           businessRules: {
             lateFeeAmount: facility.defaultBusinessRules.lateFeeAmount,
@@ -328,6 +441,7 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
           facilityId: room.facilityId,
           roomId: room.id,
           renterId: renter.id,
+          paymentDueDateSetting: 'first_day' as const,
           payments: [] as any[],
           totalAmount: 0,
           totalPaid: 0,
@@ -337,28 +451,64 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
         // Generate monthly payments for 2025
         let totalAmount = 0;
         let totalPaid = 0;
+        const currentDate = new Date();
+        const currentMonth = currentDate.getMonth(); // 0-11
+        const currentYear = currentDate.getFullYear();
+        
+        // Determine if this room should have some overdue payments (10-15 rooms total)
+        const shouldHaveOverdue = Math.random() < 0.15; // 15% chance of having overdue payments
         
         for (let month = 0; month < 12; month++) {
           const dueDate = new Date(2025, month, 1);
-          const isPaid = month < 3; // First 3 months are paid
           const paymentAmount = room.monthlyRent;
+          
+          // Determine payment status
+          let status: 'paid' | 'pending' | 'overdue' = 'pending';
+          let paidAmount = 0;
+          let paidDate: any = null;
+          let paymentMethod: string | undefined = undefined;
+          
+          if (month < currentMonth && currentYear === 2025) {
+            // Past months should be paid (unless this room has overdue payments)
+            if (!shouldHaveOverdue || Math.random() < 0.8) {
+              status = 'paid';
+              paidAmount = paymentAmount;
+              paidDate = Timestamp.fromDate(new Date(2025, month, Math.floor(Math.random() * 5) + 1));
+              paymentMethod = ['bank_transfer', 'eft', 'cash'][Math.floor(Math.random() * 3)];
+            } else {
+              status = 'overdue';
+            }
+          } else if (month === currentMonth && currentYear === 2025) {
+            // Current month - mostly paid, some pending
+            if (Math.random() < 0.7) {
+              status = 'paid';
+              paidAmount = paymentAmount;
+              paidDate = Timestamp.fromDate(new Date(2025, month, Math.floor(Math.random() * 5) + 1));
+              paymentMethod = ['bank_transfer', 'eft', 'cash'][Math.floor(Math.random() * 3)];
+            } else {
+              status = 'pending';
+            }
+          } else {
+            // Future months are pending
+            status = 'pending';
+          }
           
           const payment = {
             month: `2025-${String(month + 1).padStart(2, '0')}`,
             dueDate: Timestamp.fromDate(dueDate),
             amount: paymentAmount,
             type: 'rent' as const,
-            status: isPaid ? 'paid' as const : 'pending' as const,
-            ...(isPaid && {
-              paidAmount: paymentAmount,
-              paidDate: Timestamp.fromDate(new Date(2025, month, Math.floor(Math.random() * 5) + 1)),
-              paymentMethod: ['bank_transfer', 'eft', 'cash'][Math.floor(Math.random() * 3)]
+            status: status,
+            ...(status === 'paid' && {
+              paidAmount: paidAmount,
+              paidDate: paidDate,
+              paymentMethod: paymentMethod
             })
           };
 
           paymentSchedule.payments.push(payment);
           totalAmount += paymentAmount;
-          if (isPaid) totalPaid += paymentAmount;
+          if (status === 'paid') totalPaid += paidAmount;
         }
 
         paymentSchedule.totalAmount = totalAmount;
@@ -447,12 +597,12 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
                 Generate sample data for testing and demonstration:
               </p>
               <ul className="text-gray-300 mb-4 space-y-1 text-sm">
-                <li>• 3 Facilities: Yakaza, RBM, Test Facility</li>
-                <li>• 9 Rooms total (3 per facility) with pricing R500-R1700</li>
-                <li>• 8 Renters with complete profiles</li>
-                <li>• 8 Lease agreements (1 room per facility left available)</li>
-                <li>• Payment schedules for all of 2025</li>
-                <li>• Some payments already captured (first 3 months)</li>
+                <li>• 5 Facilities: 3 RBR, 2 Yakaza (all in KZN)</li>
+                <li>• 10-20 Rooms per facility with pricing R750-R1800</li>
+                <li>• 40-95% occupancy with realistic South African renters</li>
+                <li>• 2% rooms in maintenance status</li>
+                <li>• Lease agreements for 2025 (Jan-Dec)</li>
+                <li>• Most payments up to date, some overdue (10-15 rooms)</li>
               </ul>
               <Button
                 variant="primary"
@@ -507,6 +657,37 @@ const DataManagement: React.FC<DataManagementProps> = ({ onClose }) => {
                   <>
                     <Calculator className="w-4 h-4 mr-2" />
                     Calculate Penalties
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Clear User Data Section */}
+        <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-6">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-6 h-6 text-orange-400 mt-1" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-orange-400 mb-2">Clear User Data (Preserve Admin)</h3>
+              <p className="text-gray-300 mb-4">
+                Delete all user accounts except the admin user. This is useful for testing user creation flows.
+              </p>
+              <Button
+                variant="secondary"
+                onClick={handleClearUserData}
+                disabled={isClearing}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {isClearing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Clearing User Data...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Clear User Data
                   </>
                 )}
               </Button>

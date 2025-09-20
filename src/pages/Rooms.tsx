@@ -34,7 +34,6 @@ interface Facility {
     paymentMethods: string[];
   };
   primaryColor: string;
-  billingEntity?: string;
   status: 'active' | 'inactive';
   createdAt: any;
   updatedAt: any;

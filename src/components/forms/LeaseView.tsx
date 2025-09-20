@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Calendar, DollarSign, User, Building2, DoorClosed, X, Eye, CreditCard } from 'lucide-react';
+import { FileText, User, Building2, DoorClosed, X, CreditCard } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { renterService, facilityService, roomService, paymentScheduleService } from '../../services/firebaseService';

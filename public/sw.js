@@ -1,12 +1,10 @@
-// Service Worker for Unitra PWA
-const CACHE_NAME = 'unitra-v1.0.0';
+// Service Worker for RentDesk PWA
+const CACHE_NAME = 'rentdesk-v1.0.0';
 const urlsToCache = [
   '/',
   '/static/js/bundle.js',
   '/static/css/main.css',
-  '/Unitra32.png',
-  '/Unitra180.png',
-  '/Unitra512.png',
+  '/RentDesk.png',
   '/manifest.json'
 ];
 

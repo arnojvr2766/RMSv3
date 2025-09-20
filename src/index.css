@@ -109,4 +109,20 @@
   .bg-surface {
     background-color: #2A2A2A;
   }
+  
+  /* Prevent Chrome extension interference */
+  input[data-form-type="other"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+  }
+  
+  /* Disable autofill styling */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px #374151 inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+  }
 }

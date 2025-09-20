@@ -1,7 +1,7 @@
 {
-  "name": "Unitra - Units - Rent - Admin",
-  "short_name": "Unitra",
-  "description": "Rental Management System for Units, Rent, and Admin",
+  "name": "RentDesk",
+  "short_name": "RentDesk",
+  "description": "Rental Management System",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1f2937",
@@ -11,43 +11,43 @@
   "lang": "en",
   "icons": [
     {
-      "src": "/Unitra16.png",
+      "src": "/RentDesk.png",
       "sizes": "16x16",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/Unitra32.png",
+      "src": "/RentDesk.png",
       "sizes": "32x32",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/Unitra180.png",
+      "src": "/RentDesk.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/Unitra512.png",
+      "src": "/RentDesk.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/Unitra1024.png",
+      "src": "/RentDesk.png",
       "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/Unitra180.png",
+      "src": "/RentDesk.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/Unitra512.png",
+      "src": "/RentDesk.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -56,7 +56,7 @@
   "categories": ["business", "productivity", "utilities"],
   "screenshots": [
     {
-      "src": "/Unitra512.png",
+      "src": "/RentDesk.png",
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow"

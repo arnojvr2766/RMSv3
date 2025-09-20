@@ -11,7 +11,6 @@ import {
   FileText,
   AlertTriangle, 
   MessageSquare, 
-  Settings,
   Menu,
   X,
   Clock,
@@ -114,14 +113,6 @@ const menuItems: MenuItem[] = [
     path: '/complaints',
     roles: ['system_admin', 'standard_user'],
     description: 'Capture complaints, track resolution status, manage tenant issues'
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: Settings,
-    path: '/settings',
-    roles: ['system_admin'],
-    description: 'System configuration, feature flags, user management'
   }
 ];
 
@@ -172,13 +163,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
           {isOpen && (
             <div className="flex items-center space-x-3">
               <img 
-                src="/Unitra1024.png" 
-                alt="Unitra Logo" 
+                src="/RentDesk.png" 
+                alt="RentDesk Logo" 
                 className="w-8 h-8 rounded-lg"
               />
               <div>
-                <span className="text-white font-semibold text-lg">Unitra</span>
-                <div className="text-xs text-gray-400">Units - Rent - Admin</div>
+                <span className="text-white font-semibold text-lg">RentDesk</span>
               </div>
             </div>
           )}
@@ -186,8 +176,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
           {!isOpen && (
             <div className="flex justify-center w-full">
               <img 
-                src="/Unitra1024.png" 
-                alt="Unitra Logo" 
+                src="/RentDesk.png" 
+                alt="RentDesk Logo" 
                 className="w-8 h-8 rounded-lg"
               />
             </div>

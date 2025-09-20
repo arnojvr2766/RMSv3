@@ -169,6 +169,7 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
           facilityId: lease.facilityId,
           roomId: lease.roomId,
           renterId: lease.renterId,
+          paymentDueDateSetting: 'first_day' as const,
           payments: [{
             month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-deposit-payout`,
             dueDate: Timestamp.fromDate(new Date(formData.payoutDate)),

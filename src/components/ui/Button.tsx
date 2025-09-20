@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 
 interface ButtonProps {
   variant?: 'primary' | 'secondary' | 'accent' | 'outline' | 'ghost' | 'danger';
@@ -8,6 +8,7 @@ interface ButtonProps {
   disabled?: boolean;
   className?: string;
   type?: 'button' | 'submit' | 'reset';
+  title?: string;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -18,6 +19,7 @@ const Button: React.FC<ButtonProps> = ({
   disabled = false,
   className = '',
   type = 'button',
+  title,
 }) => {
   const baseClasses = 'font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
   
@@ -46,6 +48,7 @@ const Button: React.FC<ButtonProps> = ({
       className={classes}
       onClick={onClick}
       disabled={disabled}
+      title={title}
     >
       {children}
     </button>
