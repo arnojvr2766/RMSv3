@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { userService } from '../services/userService';
+import { UserService } from '../services/userService';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
@@ -40,23 +40,23 @@ const SetupPassword: React.FC = () => {
       }
 
       try {
-        // TODO: Implement token validation
-        // For now, we'll simulate finding user by token
-        // In production, you'd query Firestore for the user with this token
+        // Validate the invitation token and get user data
+        const userData = await UserService.validateInvitationToken(token);
         
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock user data - in production, this would come from Firestore
-        setUserInfo({
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@example.com',
-          role: 'standard_user'
-        });
+        if (userData) {
+          setUserInfo({
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            email: userData.email,
+            role: userData.role
+          });
+        } else {
+          setError('Invalid or expired invitation link. Please contact your administrator.');
+        }
         
         setIsLoading(false);
       } catch (error: any) {
+        console.error('Token validation error:', error);
         setError('Invalid or expired invitation link. Please contact your administrator.');
         setIsLoading(false);
       }
@@ -97,27 +97,42 @@ const SetupPassword: React.FC = () => {
         return;
       }
 
-      // Create Firebase user account
-      const userCredential = await createUserWithEmailAndPassword(
-        auth, 
-        userInfo.email, 
-        formData.password
-      );
+      try {
+        // Try to create Firebase user account
+        const userCredential = await createUserWithEmailAndPassword(
+          auth, 
+          userInfo.email, 
+          formData.password
+        );
 
-      // Update user profile with name
-      await updateProfile(userCredential.user, {
-        displayName: `${userInfo.firstName} ${userInfo.lastName}`
-      });
+        // Update user profile with name
+        await updateProfile(userCredential.user, {
+          displayName: `${userInfo.firstName} ${userInfo.lastName}`
+        });
 
-      // TODO: Update user status in Firestore to 'active'
-      // await userService.updateUserStatus(userId, 'active');
+        // Update user status in Firestore to 'active'
+        await UserService.updateUserStatus(userCredential.user.uid, 'active');
 
-      setSuccess(true);
-      
-      // Redirect to dashboard after 3 seconds
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 3000);
+        setSuccess(true);
+        
+        // Redirect to login after 3 seconds
+        setTimeout(() => {
+          navigate('/');
+        }, 3000);
+
+      } catch (createError: any) {
+        // If user already exists, that's actually fine - they can just log in
+        if (createError.code === 'auth/email-already-in-use') {
+          setSuccess(true);
+          
+          // Redirect to login after 3 seconds
+          setTimeout(() => {
+            navigate('/');
+          }, 3000);
+        } else {
+          throw createError; // Re-throw other errors
+        }
+      }
 
     } catch (error: any) {
       console.error('Error setting up password:', error);
@@ -182,9 +197,9 @@ const SetupPassword: React.FC = () => {
             <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-green-400" />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-4">Account Created!</h1>
+            <h1 className="text-2xl font-bold text-white mb-4">Password Set Up!</h1>
             <p className="text-gray-300 mb-6">
-              Your password has been set up successfully. You'll be redirected to the dashboard shortly.
+              Your password has been set up successfully. You'll be redirected to the login screen to sign in.
             </p>
             <div className="w-full bg-gray-700 rounded-lg p-4">
               <div className="w-full bg-green-500 rounded-full h-2">
@@ -258,7 +273,7 @@ const SetupPassword: React.FC = () => {
                     autoComplete="new-password"
                     autoCapitalize="off"
                     autoCorrect="off"
-                    spellCheck="false"
+                    spellCheck={false}
                   />
                   <button
                     type="button"
@@ -287,7 +302,7 @@ const SetupPassword: React.FC = () => {
                     autoComplete="new-password"
                     autoCapitalize="off"
                     autoCorrect="off"
-                    spellCheck="false"
+                    spellCheck={false}
                   />
                   <button
                     type="button"

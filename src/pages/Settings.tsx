@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Shield, Users, Building2, DoorClosed, RotateCcw, Check, Calendar, UserPlus, Mail, User, Crown, Wifi, WifiOff, Eye, Bell, Monitor, Database, Download, X, MoreVertical, Edit, Trash2, UserCheck, UserX } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
+import { useOrganizationSettings } from '../contexts/OrganizationSettingsContext';
 import { useRole } from '../contexts/RoleContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -8,8 +9,26 @@ import Card from '../components/ui/Card';
 import { UserService, type CreateUserRequest, type User as UserType } from '../services/userService';
 
 const SettingsPage: React.FC = () => {
+  // User-specific settings (UI preferences)
   const { 
-    // Payment Settings
+    defaultViewMode,
+    itemsPerPage,
+    showAdvancedOptions,
+    setDefaultViewMode,
+    setItemsPerPage,
+    setShowAdvancedOptions,
+    emailNotifications,
+    pushNotifications,
+    notificationFrequency,
+    setEmailNotifications,
+    setPushNotifications,
+    setNotificationFrequency,
+    isLoading: userSettingsLoading,
+    isOffline: userSettingsOffline
+  } = useSettings();
+
+  // Organization-wide settings (business rules)
+  const {
     paymentDueDate,
     allowStandardUserPastPayments,
     requireAdminApprovalForPastPayments,
@@ -18,8 +37,6 @@ const SettingsPage: React.FC = () => {
     setAllowStandardUserPastPayments,
     setRequireAdminApprovalForPastPayments,
     setMaxPastPaymentDays,
-    
-    // User Permissions
     allowStandardUserFacilities, 
     allowStandardUserRooms,
     allowStandardUserLeases,
@@ -34,27 +51,13 @@ const SettingsPage: React.FC = () => {
     setAllowStandardUserRenters,
     setAllowStandardUserMaintenance,
     setAllowStandardUserPenalties,
-    
-    // UI Settings
-    defaultViewMode,
-    itemsPerPage,
-    showAdvancedOptions,
-    setDefaultViewMode,
-    setItemsPerPage,
-    setShowAdvancedOptions,
-    
-    // Notification Settings
-    emailNotifications,
-    pushNotifications,
-    notificationFrequency,
-    setEmailNotifications,
-    setPushNotifications,
-    setNotificationFrequency,
-    
-    // Loading state
-    isLoading,
-    isOffline
-  } = useSettings();
+    defaultLateFee,
+    setDefaultLateFee,
+    defaultChildSurcharge,
+    setDefaultChildSurcharge,
+    isLoading: orgSettingsLoading,
+    isOffline: orgSettingsOffline
+  } = useOrganizationSettings();
   const { currentRole, isSystemAdmin } = useRole();
   
   // Tab state
@@ -80,12 +83,12 @@ const SettingsPage: React.FC = () => {
   // Debug logging for settings
   useEffect(() => {
     console.log('Settings Debug:', {
-      isLoading,
+      orgSettingsLoading,
       allowStandardUserPastPayments,
       requireAdminApprovalForPastPayments,
       maxPastPaymentDays
     });
-  }, [isLoading, allowStandardUserPastPayments, requireAdminApprovalForPastPayments, maxPastPaymentDays]);
+  }, [orgSettingsLoading, allowStandardUserPastPayments, requireAdminApprovalForPastPayments, maxPastPaymentDays]);
 
   // Load users when user management tab is active
   useEffect(() => {
@@ -720,7 +723,7 @@ const SettingsPage: React.FC = () => {
                 <div>
                   <h3 className="text-white font-medium">Past Payment Capture</h3>
                   <p className="text-gray-400 text-sm">Control how standard users can capture payments with past dates</p>
-                  {isLoading && (
+                  {orgSettingsLoading && (
                     <p className="text-yellow-400 text-xs mt-1">Loading settings...</p>
                   )}
                 </div>
@@ -741,7 +744,7 @@ const SettingsPage: React.FC = () => {
                       type="checkbox"
                       checked={allowStandardUserPastPayments}
                       onChange={(e) => handleSettingChange(setAllowStandardUserPastPayments, e.target.checked)}
-                      disabled={isLoading}
+                      disabled={orgSettingsLoading}
                       className="sr-only peer"
                     />
                     <div className={`w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 ${isLoading ? 'opacity-50' : ''}`}></div>
@@ -749,7 +752,7 @@ const SettingsPage: React.FC = () => {
                 </div>
 
                 {/* Require Admin Approval */}
-                {!isLoading && allowStandardUserPastPayments && (
+                {!orgSettingsLoading && allowStandardUserPastPayments && (
                   <div className="flex items-center justify-between p-3 bg-gray-600 rounded-lg">
                     <div className="flex items-center space-x-3">
                       <Shield className="w-4 h-4 text-gray-400" />
@@ -763,16 +766,16 @@ const SettingsPage: React.FC = () => {
                         type="checkbox"
                         checked={requireAdminApprovalForPastPayments}
                         onChange={(e) => handleSettingChange(setRequireAdminApprovalForPastPayments, e.target.checked)}
-                        disabled={isLoading}
+                        disabled={orgSettingsLoading}
                         className="sr-only peer"
                       />
-                      <div className={`w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 ${isLoading ? 'opacity-50' : ''}`}></div>
+                      <div className={`w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-500/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 ${orgSettingsLoading ? 'opacity-50' : ''}`}></div>
                     </label>
                   </div>
                 )}
 
                 {/* Max Past Days */}
-                {!isLoading && allowStandardUserPastPayments && (
+                {!orgSettingsLoading && allowStandardUserPastPayments && (
                   <div className="p-3 bg-gray-600 rounded-lg">
                     <div className="flex items-center space-x-3 mb-3">
                       <Calendar className="w-4 h-4 text-gray-400" />
@@ -789,8 +792,8 @@ const SettingsPage: React.FC = () => {
                         max="90"
                         value={maxPastPaymentDays}
                         onChange={(e) => setMaxPastPaymentDays(Number(e.target.value))}
-                        disabled={isLoading}
-                        className={`w-20 px-3 py-2 bg-gray-700 border border-gray-500 rounded-lg text-white focus:outline-none focus:border-primary-500 ${isLoading ? 'opacity-50' : ''}`}
+                        disabled={orgSettingsLoading}
+                        className={`w-20 px-3 py-2 bg-gray-700 border border-gray-500 rounded-lg text-white focus:outline-none focus:border-primary-500 ${orgSettingsLoading ? 'opacity-50' : ''}`}
                       />
                       <span className="text-gray-400 text-sm">days</span>
                     </div>

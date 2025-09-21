@@ -1,4 +1,4 @@
-import { useSettings } from '../contexts/SettingsContext';
+import { useOrganizationSettings } from '../contexts/OrganizationSettingsContext';
 import { useRole } from '../contexts/RoleContext';
 
 export interface PaymentDateValidation {
@@ -85,7 +85,7 @@ export const usePaymentValidation = () => {
     allowStandardUserPastPayments, 
     requireAdminApprovalForPastPayments, 
     maxPastPaymentDays 
-  } = useSettings();
+  } = useOrganizationSettings();
   const { isSystemAdmin } = useRole();
   
   const validatePayment = (paymentDate: Date): PaymentDateValidation => {

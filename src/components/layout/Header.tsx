@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, Settings, LogOut, Menu, Database, User, Wifi, WifiOff } from 'lucide-react';
-import RoleToggle from '../ui/RoleToggle';
 import Button from '../ui/Button';
 import { useRole } from '../../contexts/RoleContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -59,28 +58,18 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                    </Link>
                  </div>
 
-          {/* Role Toggle - Debug Mode */}
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-xs text-secondary font-medium">
-                DEBUG MODE:
-              </span>
-              <RoleToggle />
-            </div>
-            
-            {/* Current Role Indicator */}
-            <div className="flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
-              <span className="text-xs text-secondary">
-                Current Role:
-              </span>
-              <span className={`text-xs font-semibold ${
-                isSystemAdmin 
-                  ? 'text-primary-500' 
-                  : 'text-accent-blue-500'
-              }`}>
-                {currentRole === 'system_admin' ? 'System Admin' : 'Standard User'}
-              </span>
-            </div>
+          {/* User Role Indicator */}
+          <div className="flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
+            <span className="text-xs text-gray-400">
+              Role:
+            </span>
+            <span className={`text-xs font-semibold ${
+              isSystemAdmin 
+                ? 'text-yellow-400' 
+                : 'text-blue-400'
+            }`}>
+              {currentRole === 'system_admin' ? 'System Admin' : 'Standard User'}
+            </span>
           </div>
 
           {/* Action Buttons */}

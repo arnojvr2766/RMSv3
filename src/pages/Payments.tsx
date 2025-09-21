@@ -23,7 +23,8 @@ import {
   Shield
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
-import { useSettings } from '../contexts/SettingsContext';
+import { useOrganizationSettings } from '../contexts/OrganizationSettingsContext';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   facilityService, 
   roomService, 
@@ -164,7 +165,8 @@ interface PaymentTransaction {
 
 const Payments: React.FC = () => {
   const { currentRole, isSystemAdmin } = useRole();
-  const { allowStandardUserRooms } = useSettings();
+  const { allowStandardUserPayments } = useOrganizationSettings();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   
   // State
@@ -203,7 +205,19 @@ const Payments: React.FC = () => {
   }>({ totalPending: 0, pendingToday: 0, pendingThisWeek: 0 });
 
   // Check permissions
-  const canManagePayments = isSystemAdmin || (currentRole === 'standard_user' && allowStandardUserRooms);
+  // Standard users should always be able to manage payments (capture and edit)
+  // System admins have full access, standard users have controlled access
+  const canManagePayments = isSystemAdmin || allowStandardUserPayments;
+  
+  // Debug logging for permissions
+  console.log('🔍 Payment Permissions Debug:', {
+    currentRole,
+    isSystemAdmin,
+    allowStandardUserPayments,
+    canManagePayments,
+    userEmail: user?.email
+  });
+  
 
   // Load all data
   useEffect(() => {

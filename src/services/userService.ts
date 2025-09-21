@@ -47,11 +47,11 @@ class UserService {
   /**
    * Create a new user invitation
    */
-  async createUserInvitation(userData: CreateUserRequest): Promise<InviteUserResponse> {
+  static async createUserInvitation(userData: CreateUserRequest): Promise<InviteUserResponse> {
     try {
       // Check if user already exists
       const existingUserQuery = query(
-        collection(db, this.collectionName),
+        collection(db, 'users'),
         where('email', '==', userData.email)
       );
       const existingUsers = await getDocs(existingUserQuery);
@@ -64,12 +64,12 @@ class UserService {
       }
 
       // Generate invitation token
-      const invitationToken = this.generateInvitationToken();
+      const invitationToken = UserService.generateInvitationToken();
       const invitationExpires = new Date();
       invitationExpires.setDate(invitationExpires.getDate() + 7); // 7 days expiry
 
       // Create user document
-      const userRef = doc(collection(db, this.collectionName));
+      const userRef = doc(collection(db, 'users'));
       const user: User = {
         id: userRef.id,
         firstName: userData.firstName,
@@ -87,7 +87,7 @@ class UserService {
       await setDoc(userRef, user);
 
       // TODO: Send email verification
-      await this.sendInvitationEmail(user, invitationToken);
+      await UserService.sendInvitationEmail(user, invitationToken);
 
       return {
         success: true,
@@ -101,6 +101,40 @@ class UserService {
         success: false,
         message: error.message || 'Failed to create user invitation.'
       };
+    }
+  }
+
+  /**
+   * Validate invitation token and return user data
+   */
+  static async validateInvitationToken(token: string): Promise<User | null> {
+    try {
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('invitationToken', '==', token),
+        where('status', '==', 'pending')
+      );
+      const querySnapshot = await getDocs(usersQuery);
+      
+      if (querySnapshot.empty) {
+        return null;
+      }
+      
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data() as User;
+      
+      // Check if token is expired
+      if (userData.invitationExpires && userData.invitationExpires.toDate() < new Date()) {
+        return null;
+      }
+      
+      return {
+        ...userData,
+        id: userDoc.id
+      };
+    } catch (error) {
+      console.error('Error validating invitation token:', error);
+      return null;
     }
   }
 
@@ -125,10 +159,10 @@ class UserService {
   /**
    * Get user by email
    */
-  async getUserByEmail(email: string): Promise<User | null> {
+  static async getUserByEmail(email: string): Promise<User | null> {
     try {
       const userQuery = query(
-        collection(db, this.collectionName),
+        collection(db, 'users'),
         where('email', '==', email)
       );
       const querySnapshot = await getDocs(userQuery);
@@ -180,7 +214,7 @@ class UserService {
   /**
    * Generate a secure invitation token
    */
-  private generateInvitationToken(): string {
+  private static generateInvitationToken(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
     for (let i = 0; i < 32; i++) {
@@ -192,7 +226,7 @@ class UserService {
   /**
    * Send invitation email via Firebase Functions
    */
-  private async sendInvitationEmail(user: User, token: string): Promise<void> {
+  private static async sendInvitationEmail(user: User, token: string): Promise<void> {
     try {
       const invitationLink = `${window.location.origin}/setup-password?token=${token}`;
       

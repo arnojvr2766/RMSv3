@@ -1,98 +1,94 @@
 import { 
-  collection, 
   doc, 
   getDoc, 
   setDoc, 
   updateDoc, 
   onSnapshot,
-  serverTimestamp 
+  serverTimestamp,
+  Timestamp 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export interface UserSettings {
-  // Payment Settings
-  paymentDueDate: 'first_day' | 'last_day';
-  allowStandardUserPastPayments: boolean;
-  requireAdminApprovalForPastPayments: boolean;
-  maxPastPaymentDays: number;
-  
-  // User Permissions
-  allowStandardUserFacilities: boolean;
-  allowStandardUserRooms: boolean;
-  allowStandardUserLeases: boolean;
-  allowStandardUserPayments: boolean;
-  allowStandardUserRenters: boolean;
-  allowStandardUserMaintenance: boolean;
-  allowStandardUserPenalties: boolean;
-  
-  // UI Settings
+  // UI Settings (User-specific)
   defaultViewMode: 'cards' | 'table';
   itemsPerPage: number;
   showAdvancedOptions: boolean;
   
-  // Notification Settings
+  // Notification Settings (User-specific)
   emailNotifications: boolean;
   pushNotifications: boolean;
   notificationFrequency: 'immediate' | 'daily' | 'weekly';
   
-  // Future settings can be added here
-  [key: string]: any;
-}
-
-export interface SettingsDocument {
-  userId: string;
-  settings: UserSettings;
-  createdAt: any;
-  updatedAt: any;
+  // Metadata
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 class SettingsService {
-  private collectionName = 'userSettings';
+  private readonly collectionName = 'userSettings';
 
   /**
-   * Get user settings from Firestore
+   * Get default user settings
+   */
+  getDefaultSettings(): UserSettings {
+    return {
+      // UI Settings
+      defaultViewMode: 'cards',
+      itemsPerPage: 25,
+      showAdvancedOptions: false,
+      
+      // Notification Settings
+      emailNotifications: true,
+      pushNotifications: true,
+      notificationFrequency: 'immediate',
+      
+      // Metadata
+      createdAt: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp
+    };
+  }
+
+  /**
+   * Get user settings
    */
   async getUserSettings(userId: string): Promise<UserSettings | null> {
     try {
-      const settingsRef = doc(db, this.collectionName, userId);
-      const settingsSnap = await getDoc(settingsRef);
+      const docRef = doc(db, this.collectionName, userId);
+      const docSnap = await getDoc(docRef);
       
-      if (settingsSnap.exists()) {
-        const data = settingsSnap.data() as SettingsDocument;
-        return data.settings;
+      if (docSnap.exists()) {
+        return docSnap.data() as UserSettings;
       }
-      
       return null;
     } catch (error) {
-      console.error('Error fetching user settings:', error);
+      console.error('Error getting user settings:', error);
       throw error;
     }
   }
 
   /**
-   * Save user settings to Firestore
+   * Save user settings
    */
   async saveUserSettings(userId: string, settings: Partial<UserSettings>): Promise<void> {
     try {
-      const settingsRef = doc(db, this.collectionName, userId);
+      const docRef = doc(db, this.collectionName, userId);
+      const docSnap = await getDoc(docRef);
       
-      // Get existing settings to merge
-      const existingSettings = await this.getUserSettings(userId);
-      const mergedSettings = { ...existingSettings, ...settings };
-      
-      const updateData: any = {
-        userId,
-        settings: mergedSettings,
+      const updateData = {
+        ...settings,
         updatedAt: serverTimestamp()
       };
-      
-      // Only set createdAt if this is a new document
-      if (!existingSettings) {
-        updateData.createdAt = serverTimestamp();
+
+      if (docSnap.exists()) {
+        await updateDoc(docRef, updateData);
+      } else {
+        await setDoc(docRef, {
+          ...this.getDefaultSettings(),
+          ...updateData,
+          createdAt: serverTimestamp()
+        });
       }
-      
-      await setDoc(settingsRef, updateData, { merge: true });
-      
     } catch (error) {
       console.error('Error saving user settings:', error);
       throw error;
@@ -100,109 +96,50 @@ class SettingsService {
   }
 
   /**
-   * Update specific setting fields
+   * Subscribe to user settings changes
    */
-  async updateUserSettings(userId: string, updates: Partial<UserSettings>): Promise<void> {
-    try {
-      const settingsRef = doc(db, this.collectionName, userId);
-      
-      await updateDoc(settingsRef, {
-        [`settings.${Object.keys(updates)[0]}`]: Object.values(updates)[0],
-        updatedAt: serverTimestamp()
-      });
-      
-    } catch (error) {
-      console.error('Error updating user settings:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Listen to real-time changes in user settings
-   */
-  subscribeToUserSettings(userId: string, callback: (settings: UserSettings | null) => void): () => void {
-    const settingsRef = doc(db, this.collectionName, userId);
+  subscribeToUserSettings(
+    userId: string, 
+    callback: (settings: UserSettings) => void
+  ): () => void {
+    const docRef = doc(db, this.collectionName, userId);
     
-    return onSnapshot(settingsRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data() as SettingsDocument;
-        callback(data.settings);
-      } else {
-        callback(null);
+    return onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data() as UserSettings);
       }
-    }, (error) => {
-      console.error('Error in settings subscription:', error);
-      callback(null);
     });
   }
 
   /**
-   * Get default settings
-   */
-  getDefaultSettings(): UserSettings {
-    return {
-      // Payment Settings
-      paymentDueDate: 'first_day',
-      allowStandardUserPastPayments: false,
-      requireAdminApprovalForPastPayments: true,
-      maxPastPaymentDays: 30,
-      
-      // User Permissions
-      allowStandardUserFacilities: false,
-      allowStandardUserRooms: false,
-      allowStandardUserLeases: false,
-      allowStandardUserPayments: false,
-      allowStandardUserRenters: false,
-      allowStandardUserMaintenance: false,
-      allowStandardUserPenalties: false,
-      
-      // UI Settings
-      defaultViewMode: 'cards',
-      itemsPerPage: 20,
-      showAdvancedOptions: false,
-      
-      // Notification Settings
-      emailNotifications: true,
-      pushNotifications: true,
-      notificationFrequency: 'daily'
-    };
-  }
-
-  /**
-   * Migrate localStorage settings to Firestore
+   * Migrate old localStorage settings to Firestore
    */
   async migrateFromLocalStorage(userId: string): Promise<UserSettings> {
     try {
-      // Get settings from localStorage
-      const localSettings = localStorage.getItem('rentdesk-settings');
-      let parsedSettings: Partial<UserSettings> = {};
-      
-      if (localSettings) {
-        try {
-          parsedSettings = JSON.parse(localSettings);
-        } catch (error) {
-          console.warn('Failed to parse localStorage settings:', error);
-        }
+      const oldSettings = localStorage.getItem('rms_settings');
+      if (!oldSettings) {
+        return this.getDefaultSettings();
       }
 
-      // Get default settings
-      const defaultSettings = this.getDefaultSettings();
+      const parsed = JSON.parse(oldSettings);
       
-      // Merge localStorage settings with defaults
-      const migratedSettings = { ...defaultSettings, ...parsedSettings };
-      
-      // Save to Firestore
+      // Map old settings to new structure (only UI and notification settings)
+      const migratedSettings: UserSettings = {
+        ...this.getDefaultSettings(),
+        // Map any relevant old settings here if needed
+        createdAt: serverTimestamp() as Timestamp,
+        updatedAt: serverTimestamp() as Timestamp
+      };
+
       await this.saveUserSettings(userId, migratedSettings);
       
-      // Clear localStorage after successful migration
-      localStorage.removeItem('rentdesk-settings');
+      // Remove old settings from localStorage
+      localStorage.removeItem('rms_settings');
       
-      console.log('Settings migrated from localStorage to Firestore');
       return migratedSettings;
-      
     } catch (error) {
-      console.error('Error migrating settings:', error);
-      throw error;
+      console.error('Error migrating settings from localStorage:', error);
+      return this.getDefaultSettings();
     }
   }
 }
