@@ -38,7 +38,7 @@ const menuItems: MenuItem[] = [
     id: 'home',
     label: 'Home',
     icon: HouseHeart,
-    path: '/',
+    path: '/dashboard',
     roles: ['system_admin', 'standard_user'],
     description: 'Return to the main dashboard and overview'
   },

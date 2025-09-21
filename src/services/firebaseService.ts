@@ -802,7 +802,12 @@ export const paymentScheduleService = {
       console.log('Schedule data:', scheduleData);
       console.log('Schedule payments:', scheduleData.payments);
       
-      const updatedPayments = scheduleData.payments.map(payment => {
+      // Convert payments to array if it's an object
+      const paymentsArray = Array.isArray(scheduleData.payments) 
+        ? scheduleData.payments 
+        : Object.values(scheduleData.payments || {});
+      
+      const updatedPayments = paymentsArray.map(payment => {
         if (payment.month === monthKey) {
           // Store original values if this is an edit
           const originalValues = editedBy ? {
@@ -940,17 +945,69 @@ export const paymentScheduleService = {
   // Get all pending payment approvals
   async getPendingPaymentApprovals(): Promise<PaymentApproval[]> {
     try {
+      // First, get separate approval records from payment_approvals collection
       const q = query(
         collection(db, 'payment_approvals'),
-        where('status', '==', 'pending'),
-        orderBy('createdAt', 'desc')
+        where('status', '==', 'pending')
       );
       
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
+      const separateApprovals = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       })) as PaymentApproval[];
+
+      // Then, get payments with pending_approval status from payment schedules
+      const schedulesQuery = query(collection(db, 'payment_schedules'));
+      const schedulesSnapshot = await getDocs(schedulesQuery);
+      
+      const scheduleApprovals: PaymentApproval[] = [];
+      
+      schedulesSnapshot.forEach(doc => {
+        const schedule = { ...doc.data(), id: doc.id } as PaymentSchedule;
+        
+        // Convert payments to array if it's an object
+        const paymentsArray = Array.isArray(schedule.payments) 
+          ? schedule.payments 
+          : Object.values(schedule.payments || {});
+        
+        paymentsArray.forEach((payment, index) => {
+          if (payment.status === 'pending_approval') {
+            scheduleApprovals.push({
+              id: `${schedule.id}_${payment.month}`,
+              paymentScheduleId: schedule.id!,
+              paymentIndex: index,
+              leaseId: schedule.leaseId,
+              facilityId: schedule.facilityId,
+              roomId: schedule.roomId,
+              renterId: schedule.renterId,
+              originalValues: {
+                paidAmount: undefined,
+                paidDate: undefined,
+                paymentMethod: undefined,
+              },
+              newValues: {
+                paidAmount: payment.paidAmount,
+                paidDate: payment.paidDate,
+                paymentMethod: payment.paymentMethod,
+              },
+              editedBy: payment.capturedBy || 'unknown',
+              editedAt: payment.capturedAt || Timestamp.now(),
+              status: 'pending',
+              createdAt: payment.capturedAt || Timestamp.now(),
+              updatedAt: payment.capturedAt || Timestamp.now(),
+            });
+          }
+        });
+      });
+
+      // Combine both types of approvals and sort by creation date
+      const allApprovals = [...separateApprovals, ...scheduleApprovals];
+      return allApprovals.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || (a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0);
+        const bTime = b.createdAt?.toMillis?.() || (b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0);
+        return bTime - aTime;
+      });
     } catch (error) {
       console.error('Error getting pending payment approvals:', error);
       throw error;
@@ -1018,52 +1075,127 @@ export const paymentScheduleService = {
     reviewNotes?: string
   ): Promise<void> {
     try {
-      const approvalRef = doc(db, 'payment_approvals', approvalId);
-      const approvalDoc = await getDoc(approvalRef);
+      console.log('Reviewing payment approval:', { approvalId, decision, reviewedBy });
+      console.log('Approval ID type:', typeof approvalId);
+      console.log('Approval ID includes underscore:', approvalId.includes('_'));
       
-      if (!approvalDoc.exists()) {
-        throw new Error('Payment approval not found');
-      }
-      
-      const approvalData = approvalDoc.data() as PaymentApproval;
-      
-      // Get the payment schedule to find the month key
-      const scheduleRef = doc(db, 'payment_schedules', approvalData.paymentScheduleId);
-      const scheduleDoc = await getDoc(scheduleRef);
-      
-      if (!scheduleDoc.exists()) {
-        throw new Error('Payment schedule not found');
-      }
-      
-      const scheduleData = scheduleDoc.data() as PaymentSchedule;
-      const monthKey = scheduleData.payments[approvalData.paymentIndex].month;
-      
-      if (decision === 'approved') {
-        // Apply the changes to the payment schedule
-        await this.updatePaymentInSchedule(
-          approvalData.paymentScheduleId,
-          monthKey,
-          approvalData.newValues
-        );
+      // Check if this is a separate approval record or a schedule-based approval
+      if (approvalId.includes('_')) {
+        // This is a schedule-based approval (format: scheduleId_month)
+        const [scheduleId, month] = approvalId.split('_');
+        console.log('Schedule-based approval:', { scheduleId, month });
+        
+        const scheduleRef = doc(db, 'payment_schedules', scheduleId);
+        const scheduleDoc = await getDoc(scheduleRef);
+        
+        if (!scheduleDoc.exists()) {
+          throw new Error('Payment schedule not found');
+        }
+        
+        const scheduleData = scheduleDoc.data() as PaymentSchedule;
+        
+        // Convert payments to array if it's an object
+        const paymentsArray = Array.isArray(scheduleData.payments) 
+          ? scheduleData.payments 
+          : Object.values(scheduleData.payments || {});
+        
+        const paymentIndex = paymentsArray.findIndex(p => p.month === month);
+        
+        if (paymentIndex === -1) {
+          throw new Error('Payment not found');
+        }
+        
+        const payment = paymentsArray[paymentIndex];
+        
+        if (decision === 'approved') {
+          // Update payment status to paid/partial based on amount
+          const newStatus = payment.paidAmount && payment.paidAmount >= payment.amount ? 'paid' : 'partial';
+          
+          await this.updatePaymentInSchedule(scheduleId, month, {
+            status: newStatus,
+            approvedBy: reviewedBy,
+            approvedAt: Timestamp.now(),
+            approvalNotes: reviewNotes || '',
+          });
+        } else {
+          // Reject: reset payment to pending and clear payment data
+          await this.updatePaymentInSchedule(scheduleId, month, {
+            status: 'pending',
+            paidAmount: undefined,
+            paidDate: undefined,
+            paymentMethod: undefined,
+            notes: undefined,
+            paymentProof: undefined,
+            capturedBy: undefined,
+            capturedAt: undefined,
+            requiresApproval: undefined,
+            approvedBy: reviewedBy,
+            approvedAt: Timestamp.now(),
+            approvalNotes: `REJECTED: ${reviewNotes || 'Payment rejected by admin'}`,
+          });
+        }
       } else {
-        // Revert to original values
-        await this.updatePaymentInSchedule(
-          approvalData.paymentScheduleId,
-          monthKey,
-          approvalData.originalValues
-        );
+        // This is a separate approval record
+        const approvalRef = doc(db, 'payment_approvals', approvalId);
+        const approvalDoc = await getDoc(approvalRef);
+        
+        if (!approvalDoc.exists()) {
+          throw new Error('Payment approval not found');
+        }
+        
+        const approvalData = approvalDoc.data() as PaymentApproval;
+        
+        // Get the payment schedule to find the month key
+        const scheduleRef = doc(db, 'payment_schedules', approvalData.paymentScheduleId);
+        const scheduleDoc = await getDoc(scheduleRef);
+        
+        if (!scheduleDoc.exists()) {
+          throw new Error('Payment schedule not found');
+        }
+        
+        const scheduleData = scheduleDoc.data() as PaymentSchedule;
+        
+        // Convert payments to array if it's an object
+        const paymentsArray = Array.isArray(scheduleData.payments) 
+          ? scheduleData.payments 
+          : Object.values(scheduleData.payments || {});
+        
+        const monthKey = paymentsArray[approvalData.paymentIndex].month;
+        
+        if (decision === 'approved') {
+          // Apply the changes to the payment schedule
+          await this.updatePaymentInSchedule(
+            approvalData.paymentScheduleId,
+            monthKey,
+            approvalData.newValues
+          );
+        } else {
+          // Revert to original values
+          await this.updatePaymentInSchedule(
+            approvalData.paymentScheduleId,
+            monthKey,
+            approvalData.originalValues
+          );
+        }
+        
+        // Update the approval status
+        await updateDoc(approvalRef, {
+          status: decision,
+          reviewedBy,
+          reviewedAt: Timestamp.now(),
+          reviewNotes,
+          updatedAt: Timestamp.now(),
+        });
       }
-      
-      // Update the approval status
-      await updateDoc(approvalRef, {
-        status: decision,
-        reviewedBy,
-        reviewedAt: Timestamp.now(),
-        reviewNotes,
-        updatedAt: Timestamp.now(),
-      });
     } catch (error) {
       console.error('Error reviewing payment approval:', error);
+      console.error('Error details:', {
+        approvalId,
+        decision,
+        reviewedBy,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
       throw error;
     }
   },

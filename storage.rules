@@ -10,40 +10,61 @@ service firebase.storage {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
     }
     
-    function getUserFacilities() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.facilities;
+    function isSystemAdmin() {
+      return getUserRole() == 'system_admin';
     }
     
-    function canAccessFacility(facilityId) {
-      return getUserRole() == 'super-admin' || facilityId in getUserFacilities();
+    function isStandardUser() {
+      return getUserRole() == 'standard_user';
     }
     
-    // Facility documents
+    // Facility documents and images
     match /facilities/{facilityId}/{allPaths=**} {
-      allow read, write: if isAuthenticated() && canAccessFacility(facilityId);
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isSystemAdmin();
     }
     
-    // Tenant documents
-    match /tenants/{tenantId}/{allPaths=**} {
-      allow read, write: if isAuthenticated() && 
-        canAccessFacility(firestore.get(/databases/(default)/documents/tenants/$(tenantId)).data.facilityId);
+    // Renter documents (ID copies, contracts, etc.)
+    match /renters/{renterId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isSystemAdmin() || isStandardUser());
     }
     
-    // Rental documents
-    match /rentals/{rentalId}/{allPaths=**} {
-      allow read, write: if isAuthenticated() && 
-        canAccessFacility(firestore.get(/databases/(default)/documents/rentals/$(rentalId)).data.facilityId);
+    // Lease documents
+    match /leases/{leaseId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isSystemAdmin() || isStandardUser());
+    }
+    
+    // Payment receipts and proof
+    match /payments/{paymentId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isSystemAdmin() || isStandardUser());
+    }
+    
+    // Room images and documents
+    match /rooms/{roomId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isSystemAdmin() || isStandardUser());
     }
     
     // User profile images
     match /users/{userId}/{allPaths=**} {
-      allow read, write: if isAuthenticated() && 
-        (getUserRole() == 'super-admin' || request.auth.uid == userId);
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+        (isSystemAdmin() || request.auth.uid == userId);
     }
     
     // General uploads (for receipts, reports, etc.)
     match /uploads/{allPaths=**} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isSystemAdmin() || isStandardUser());
+    }
+    
+    // Maintenance documents and images
+    match /maintenance/{maintenanceId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isSystemAdmin() || isStandardUser());
     }
   }
 }

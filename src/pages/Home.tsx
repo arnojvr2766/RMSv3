@@ -13,6 +13,7 @@ import {
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import QuickPaymentCapture from '../components/forms/QuickPaymentCapture';
+import SystemAdminDashboardSimple from './SystemAdminDashboardSimple';
 import { useRole } from '../contexts/RoleContext';
 
 const Home: React.FC = () => {
@@ -51,6 +52,11 @@ const Home: React.FC = () => {
     { title: 'Audit Logs', description: 'Review system audit logs', icon: FileText, color: 'bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' },
   ];
 
+  // If user is System Admin, show the comprehensive dashboard
+  if (isSystemAdmin) {
+    return <SystemAdminDashboardSimple />;
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
@@ -68,10 +74,7 @@ const Home: React.FC = () => {
             </div>
           </div>
           <p className="text-secondary">
-            {isSystemAdmin 
-              ? 'System Admin Dashboard - Manage your entire rental management system'
-              : 'Standard User Dashboard - Manage your properties and tenants'
-            }
+            Standard User Dashboard - Manage your properties and tenants
           </p>
         </div>
 
@@ -153,12 +156,6 @@ const Home: React.FC = () => {
               <CheckCircle className="w-4 h-4 mr-2" />
               Approve
             </Button>
-            {isSystemAdmin && (
-              <Button variant="outline">
-                <Settings className="w-4 h-4 mr-2" />
-                System Settings
-              </Button>
-            )}
           </div>
         </div>
 
@@ -249,30 +246,6 @@ const Home: React.FC = () => {
               </div>
             </Card>
 
-            {/* System Admin Features */}
-            {isSystemAdmin && (
-              <Card>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white">Admin Features</h3>
-                  <span className="text-xs bg-primary-500/20 text-primary-500 px-2 py-1 rounded-full">
-                    ADMIN ONLY
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {adminFeatures.map((feature, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-2 hover:bg-gray-700 rounded-lg cursor-pointer transition-colors">
-                      <div className={`p-2 rounded-lg ${feature.color}`}>
-                        <feature.icon className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-white">{feature.title}</p>
-                        <p className="text-xs text-secondary">{feature.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
           </div>
         </div>
 

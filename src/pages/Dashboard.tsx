@@ -2,8 +2,24 @@ import React from 'react';
 import { Building, CreditCard, Users, AlertCircle, CheckCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import SystemAdminDashboardSimple from './SystemAdminDashboardSimple';
+import { useRole } from '../contexts/RoleContext';
 
 const Dashboard: React.FC = () => {
+  const { isSystemAdmin, currentRole } = useRole();
+
+  // Debug logging
+  console.log('🔍 Dashboard - Current role:', currentRole);
+  console.log('🔍 Dashboard - Is System Admin:', isSystemAdmin);
+
+  // If user is System Admin, show the comprehensive dashboard
+  if (isSystemAdmin) {
+    console.log('🔍 Dashboard - Loading SystemAdminDashboardSimple');
+    return <SystemAdminDashboardSimple />;
+  }
+
+  console.log('🔍 Dashboard - Loading standard dashboard');
+
   // Mock data - will be replaced with real data from Firebase
   const stats = {
     totalIncome: 45230,
