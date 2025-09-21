@@ -292,11 +292,17 @@ class UserService {
   static async updateLastLogin(userId: string): Promise<void> {
     try {
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        lastLoginAt: serverTimestamp(),
-        loginCount: await this.incrementLoginCount(userId),
-        updatedAt: serverTimestamp()
-      });
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        await updateDoc(userRef, {
+          lastLoginAt: serverTimestamp(),
+          loginCount: await this.incrementLoginCount(userId),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        console.log('User document does not exist, skipping login tracking');
+      }
     } catch (error) {
       console.error('Error updating last login:', error);
       throw error;
