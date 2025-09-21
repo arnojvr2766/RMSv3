@@ -42,9 +42,15 @@ exports.helloWorld = functions.https.onRequest((request, response) => {
     response.json({ message: 'Hello from Firebase Functions!' });
 });
 // Send invitation email function
-exports.sendInvitationEmail = functions.https.onRequest({
-    cors: true,
-}, async (request, response) => {
+exports.sendInvitationEmail = functions.https.onRequest(async (request, response) => {
+    // Enable CORS
+    response.set('Access-Control-Allow-Origin', '*');
+    response.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.set('Access-Control-Allow-Headers', 'Content-Type');
+    if (request.method === 'OPTIONS') {
+        response.status(204).send('');
+        return;
+    }
     try {
         const { firstName, lastName, email, role, invitationLink } = request.body;
         if (!firstName || !lastName || !email || !role || !invitationLink) {
@@ -58,7 +64,7 @@ exports.sendInvitationEmail = functions.https.onRequest({
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Welcome to Unitra - Set Up Your Account</title>
+          <title>Welcome to RentDesk - Set Up Your Account</title>
           <style>
             body {
               font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -214,15 +220,14 @@ exports.sendInvitationEmail = functions.https.onRequest({
           <div class="container">
             <div class="header">
               <div class="logo-container">
-                <img src="https://rmsv3-becf7.web.app/Unitra1024.png" alt="Unitra Logo" class="logo">
+                <img src="https://rmsv3-becf7.web.app/RentDesk.png" alt="RentDesk Logo" class="logo">
               </div>
-              <h1>Unitra</h1>
-              <p>Units - Rent - Admin</p>
+              <h1>RentDesk</h1>
             </div>
             <div class="content">
               <h2 class="greeting">Welcome, ${firstName}!</h2>
               <p class="message">
-                You've been invited to join Unitra, our comprehensive rental management system. 
+                You've been invited to join RentDesk, our comprehensive rental management system. 
                 Your administrator has created an account for you with <strong>${roleDisplay}</strong> privileges.
               </p>
               <div class="role-badge">${roleDisplay}</div>
@@ -233,7 +238,7 @@ exports.sendInvitationEmail = functions.https.onRequest({
                 <a href="${invitationLink}" class="cta-button">Set Up Your Password</a>
               </div>
               <div class="features">
-                <h3>What you can do with Unitra:</h3>
+                <h3>What you can do with RentDesk:</h3>
                 <ul class="feature-list">
                   <li>Manage rental facilities and properties</li>
                   <li>Track tenant information and lease agreements</li>
@@ -244,25 +249,25 @@ exports.sendInvitationEmail = functions.https.onRequest({
                 </ul>
               </div>
               <p class="message">
-                Once you set up your password, you'll have full access to the Unitra dashboard 
+                Once you set up your password, you'll have full access to the RentDesk dashboard 
                 and can start managing your rental properties immediately.
               </p>
             </div>
             <div class="footer">
-              <p>This invitation was sent by your Unitra administrator.</p>
+              <p>This invitation was sent by your RentDesk administrator.</p>
               <p>If you didn't expect this invitation, please contact your administrator or 
-                <a href="mailto:support@unitra.com">support@unitra.com</a>
+                <a href="mailto:support@rentdesk.com">support@rentdesk.com</a>
               </p>
-              <p style="margin-top: 20px; font-size: 12px;">© 2025 Unitra. All rights reserved.</p>
+              <p style="margin-top: 20px; font-size: 12px;">© 2025 RentDesk. All rights reserved.</p>
             </div>
           </div>
         </body>
         </html>
       `;
         const mailOptions = {
-            from: 'Unitra <arnoj17@gmail.com>',
+            from: 'RentDesk <arnoj17@gmail.com>',
             to: email,
-            subject: 'Welcome to Unitra - Set Up Your Account',
+            subject: 'Welcome to RentDesk - Set Up Your Account',
             html: htmlContent,
         };
         await transporter.sendMail(mailOptions);
