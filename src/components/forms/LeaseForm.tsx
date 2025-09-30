@@ -6,6 +6,8 @@ import Card from '../ui/Card';
 import { leaseService, paymentScheduleService, generatePaymentSchedule, roomService } from '../../services/firebaseService';
 import { Timestamp } from 'firebase/firestore';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useOrganizationSettings } from '../../contexts/OrganizationSettingsContext';
+import { calculateTotalProratedAmount, getProrationDescription } from '../../utils/prorationUtils';
 
 // Temporary inline type definitions
 interface Facility {
@@ -144,8 +146,9 @@ const LeaseForm: React.FC<LeaseFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [previewSchedule, setPreviewSchedule] = useState<PaymentSchedule | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [prorationPreview, setProrationPreview] = useState<any>(null);
 
-  const { paymentDueDate } = useSettings();
+  const { paymentDueDate = 'last_day' } = useOrganizationSettings();
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => {
@@ -167,6 +170,12 @@ const LeaseForm: React.FC<LeaseFormProps> = ({
     // Auto-generate preview when dates change
     if (field === 'startDate' || field === 'endDate') {
       generatePreview({ ...formData, [field]: value });
+      calculateProrationPreview({ ...formData, [field]: value });
+    }
+    
+    // Recalculate proration when monthly rent changes
+    if (field === 'monthlyRent' || field === 'childrenCount') {
+      calculateProrationPreview({ ...formData, [field]: value });
     }
   };
 
@@ -253,6 +262,20 @@ const LeaseForm: React.FC<LeaseFormProps> = ({
     }
   };
 
+  const calculateProrationPreview = (data = formData) => {
+    if (!data.startDate || !data.endDate) return;
+
+    try {
+      const startDate = new Date(data.startDate);
+      const endDate = new Date(data.endDate);
+      
+      const prorationResult = calculateTotalProratedAmount(data.monthlyRent, startDate, endDate);
+      setProrationPreview(prorationResult);
+    } catch (error) {
+      console.error('Error calculating proration preview:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -301,7 +324,6 @@ const LeaseForm: React.FC<LeaseFormProps> = ({
       const scheduleData = generatePaymentSchedule({
         ...leaseData,
         id: leaseId,
-        depositPaymentMethod: formData.depositPaymentMethod, // Add payment method for deposit
       }, !formData.depositPaid, paymentDueDate);
 
       await paymentScheduleService.createPaymentSchedule(scheduleData);
@@ -440,6 +462,37 @@ const LeaseForm: React.FC<LeaseFormProps> = ({
                 <div>
                   <span className="text-gray-400">Total Monthly Rent:</span>
                   <span className="text-white font-semibold ml-2">R{formData.monthlyRent.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Proration Preview */}
+          {prorationPreview && (prorationPreview.breakdown.firstMonth || prorationPreview.breakdown.lastMonth) && (
+            <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <h5 className="text-white font-medium mb-2">Prorated Rent Breakdown</h5>
+              <div className="space-y-2 text-sm">
+                {prorationPreview.breakdown.firstMonth && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">First Month ({prorationPreview.breakdown.firstMonth.daysOccupied}/{prorationPreview.breakdown.firstMonth.daysInMonth} days):</span>
+                    <span className="text-white">R{prorationPreview.breakdown.firstMonth.proratedAmount.toLocaleString()}</span>
+                  </div>
+                )}
+                {prorationPreview.breakdown.fullMonths > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Full Months ({prorationPreview.breakdown.fullMonths}):</span>
+                    <span className="text-white">R{prorationPreview.breakdown.fullMonthsAmount.toLocaleString()}</span>
+                  </div>
+                )}
+                {prorationPreview.breakdown.lastMonth && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Last Month ({prorationPreview.breakdown.lastMonth.daysOccupied}/{prorationPreview.breakdown.lastMonth.daysInMonth} days):</span>
+                    <span className="text-white">R{prorationPreview.breakdown.lastMonth.proratedAmount.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-gray-600 pt-2 mt-2">
+                  <span className="text-gray-400 font-medium">Total Rent Amount:</span>
+                  <span className="text-white font-semibold">R{prorationPreview.totalAmount.toLocaleString()}</span>
                 </div>
               </div>
             </div>

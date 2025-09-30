@@ -270,14 +270,14 @@ const Facilities: React.FC = () => {
 
         {/* Facilities List */}
         {isLoading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+          <div className="flex justify-center items-center py-8 md:py-12">
+            <div className="animate-spin rounded-full h-6 w-6 md:h-8 md:w-8 border-b-2 border-primary-500"></div>
           </div>
         ) : facilities.length === 0 ? (
-          <Card className="text-center py-12">
-            <Building2 className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">No Facilities Found</h2>
-            <p className="text-gray-400 mb-6">
+          <Card className="text-center py-8 md:py-12">
+            <Building2 className="w-12 h-12 md:w-16 md:h-16 text-gray-500 mx-auto mb-3 md:mb-4" />
+            <h2 className="text-lg md:text-xl font-semibold text-white mb-2">No Facilities Found</h2>
+            <p className="text-sm md:text-base text-gray-400 mb-4 md:mb-6">
               {canManageFacilities 
                 ? 'Get started by adding your first facility'
                 : 'No facilities are available to view'
@@ -291,10 +291,10 @@ const Facilities: React.FC = () => {
             )}
           </Card>
         ) : filteredAndSortedFacilities.length === 0 ? (
-          <Card className="text-center py-12">
-            <Search className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">No Facilities Match Your Search</h2>
-            <p className="text-gray-400 mb-6">
+          <Card className="text-center py-8 md:py-12">
+            <Search className="w-12 h-12 md:w-16 md:h-16 text-gray-500 mx-auto mb-3 md:mb-4" />
+            <h2 className="text-lg md:text-xl font-semibold text-white mb-2">No Facilities Match Your Search</h2>
+            <p className="text-sm md:text-base text-gray-400 mb-4 md:mb-6">
               Try adjusting your search terms or clear the search to see all facilities.
             </p>
             <Button onClick={() => setSearchTerm('')}>
@@ -302,21 +302,21 @@ const Facilities: React.FC = () => {
             </Button>
           </Card>
         ) : viewMode === 'cards' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
             {filteredAndSortedFacilities.map((facility) => (
               <Card key={facility.id} className="hover:bg-gray-700 transition-colors">
                 <div>
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
+                  <div className="flex items-start justify-between mb-3 md:mb-4">
+                    <div className="flex items-center space-x-2 md:space-x-3">
                       <div 
-                        className="w-12 h-12 rounded-lg flex items-center justify-center"
+                        className="w-10 h-10 md:w-12 md:h-12 rounded-lg flex items-center justify-center"
                         style={{ backgroundColor: facility.primaryColor }}
                       >
-                        <Building2 className="w-6 h-6 text-white" />
+                        <Building2 className="w-5 h-5 md:w-6 md:h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-white">{facility.name}</h3>
-                        <p className="text-gray-400 text-sm">{facility.address}</p>
+                        <h3 className="text-base md:text-lg font-semibold text-white">{facility.name}</h3>
+                        <p className="text-gray-400 text-xs md:text-sm">{facility.address}</p>
                         <p className="text-gray-500 text-xs">Billing: {facility.billingEntity}</p>
                       </div>
                     </div>
@@ -349,19 +349,19 @@ const Facilities: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center space-x-2 text-sm text-gray-400">
+                  <div className="space-y-1 md:space-y-2 mb-3 md:mb-4">
+                    <div className="flex items-center space-x-2 text-xs md:text-sm text-gray-400">
                       <span>📞</span>
                       <span>{facility.contactInfo.phone}</span>
                     </div>
-                    <div className="flex items-center space-x-2 text-sm text-gray-400">
+                    <div className="flex items-center space-x-2 text-xs md:text-sm text-gray-400">
                       <span>✉️</span>
                       <span>{facility.contactInfo.email}</span>
                     </div>
                   </div>
 
-                  <div className="border-t border-gray-700 pt-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                  <div className="border-t border-gray-700 pt-3 md:pt-4">
+                    <div className="grid grid-cols-2 gap-2 md:gap-4 text-xs md:text-sm mb-3 md:mb-4">
                       <div>
                         <span className="text-gray-400">Late Fee:</span>
                         <span className="text-white ml-1">R{facility.defaultBusinessRules?.lateFeeAmount || (facility as any).settings?.lateFeeAmount || 0}</span>
@@ -374,7 +374,7 @@ const Facilities: React.FC = () => {
                     
                     {/* Facility Statistics */}
                     {facility.id && facilityStats[facility.id] && (
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-400">Total Rooms:</span>
                           <span className="text-white font-medium">{facilityStats[facility.id].totalRooms}</span>
@@ -409,17 +409,17 @@ const Facilities: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-gray-700">
-                    <div className="grid grid-cols-2 gap-3">
+                  <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t border-gray-700">
+                    <div className="grid grid-cols-2 gap-2 md:gap-3">
                       {canManageRooms && (
                         <button
                           onClick={() => {
                             console.log('Navigating to rooms for facility:', facility.id);
                             navigate(`/rooms?facility=${facility.id}`);
                           }}
-                          className="flex items-center justify-center space-x-2 py-3 px-4 rounded-lg border-2 border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+                          className="flex items-center justify-center space-x-1 md:space-x-2 py-2 md:py-3 px-2 md:px-4 rounded-lg border-2 border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors text-xs md:text-sm"
                         >
-                          <DoorClosed className="w-5 h-5" />
+                          <DoorClosed className="w-4 h-4 md:w-5 md:h-5" />
                           <span>Rooms</span>
                         </button>
                       )}
@@ -429,22 +429,22 @@ const Facilities: React.FC = () => {
                           console.log('Navigating to leases for facility:', facility.id);
                           navigate(`/leases?facility=${facility.id}`);
                         }}
-                        className="flex items-center justify-center space-x-2 py-3 px-4 rounded-lg border-2 border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+                        className="flex items-center justify-center space-x-1 md:space-x-2 py-2 md:py-3 px-2 md:px-4 rounded-lg border-2 border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors text-xs md:text-sm"
                       >
-                        <FileText className="w-5 h-5" />
+                        <FileText className="w-4 h-4 md:w-5 md:h-5" />
                         <span>Leases</span>
                       </button>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div className="grid grid-cols-2 gap-2 md:gap-3 mt-2 md:mt-3">
                       <button
                         onClick={() => {
                           console.log('Navigating to payments for facility:', facility.id);
                           navigate(`/payments?facility=${facility.id}`);
                         }}
-                        className="flex items-center justify-center space-x-2 py-3 px-4 rounded-lg border-2 border-yellow-500 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors"
+                        className="flex items-center justify-center space-x-1 md:space-x-2 py-2 md:py-3 px-2 md:px-4 rounded-lg border-2 border-yellow-500 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors text-xs md:text-sm"
                       >
-                        <DollarSign className="w-5 h-5" />
+                        <DollarSign className="w-4 h-4 md:w-5 md:h-5" />
                         <span>Payments</span>
                       </button>
                       
@@ -453,9 +453,9 @@ const Facilities: React.FC = () => {
                           console.log('Navigating to renters for facility:', facility.id);
                           navigate(`/renters?facility=${facility.id}`);
                         }}
-                        className="flex items-center justify-center space-x-2 py-3 px-4 rounded-lg border-2 border-purple-500 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors"
+                        className="flex items-center justify-center space-x-1 md:space-x-2 py-2 md:py-3 px-2 md:px-4 rounded-lg border-2 border-purple-500 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-xs md:text-sm"
                       >
-                        <UserPlus className="w-5 h-5" />
+                        <UserPlus className="w-4 h-4 md:w-5 md:h-5" />
                         <span>Renters</span>
                       </button>
                     </div>
@@ -466,7 +466,9 @@ const Facilities: React.FC = () => {
           </div>
         ) : (
           /* Table View */
-          <Card className="overflow-hidden">
+          <div>
+            {/* Desktop Table */}
+            <Card className="overflow-hidden hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-800">
@@ -625,6 +627,115 @@ const Facilities: React.FC = () => {
               </table>
             </div>
           </Card>
+
+          {/* Mobile Cards for Table View */}
+          <div className="md:hidden space-y-2">
+            {filteredAndSortedFacilities.map((facility) => (
+              <Card key={facility.id} className="p-3">
+                <div className="space-y-2">
+                  {/* Header Row */}
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center space-x-2">
+                      <div 
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: facility.primaryColor }}
+                      >
+                        <Building2 className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-white truncate">
+                          {facility.name}
+                        </h3>
+                        <p className="text-xs text-gray-400 truncate">
+                          {facility.address}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right ml-2">
+                      <div className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                        facility.status === 'active' 
+                          ? 'bg-green-500/20 text-green-400' 
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {facility.status}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Details Row */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-gray-400">Billing:</span>
+                      <div className="text-white font-medium truncate">{facility.billingEntity}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Total Rooms:</span>
+                      <div className="text-white font-medium">
+                        {facility.id && facilityStats[facility.id] ? facilityStats[facility.id].totalRooms : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Occupied:</span>
+                      <div className="text-green-400 font-medium">
+                        {facility.id && facilityStats[facility.id] ? facilityStats[facility.id].occupiedRooms : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Penalty Rate:</span>
+                      <div className={`font-medium ${
+                        facility.id && facilityStats[facility.id] && facilityStats[facility.id].penaltyRate > 50 ? 'text-red-400' : 
+                        facility.id && facilityStats[facility.id] && facilityStats[facility.id].penaltyRate > 25 ? 'text-yellow-400' : 
+                        'text-green-400'
+                      }`}>
+                        {facility.id && facilityStats[facility.id] ? `${facilityStats[facility.id].penaltyRate}%` : '-'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Row */}
+                  <div className="flex justify-end space-x-1 pt-2 border-t border-gray-700">
+                    <button
+                      onClick={() => {
+                        console.log('Navigating to rooms for facility:', facility.id);
+                        navigate(`/rooms?facility=${facility.id}`);
+                      }}
+                      className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors"
+                    >
+                      Rooms
+                    </button>
+                    <button
+                      onClick={() => {
+                        console.log('Navigating to leases for facility:', facility.id);
+                        navigate(`/leases?facility=${facility.id}`);
+                      }}
+                      className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-colors"
+                    >
+                      Leases
+                    </button>
+                    {canManageFacilities && (
+                      <>
+                        <button
+                          onClick={() => handleEdit(facility)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                          title="Edit Facility"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => facility.id && handleDelete(facility.id)}
+                          className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                          title="Delete Facility"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
         )}
       </div>
     </div>

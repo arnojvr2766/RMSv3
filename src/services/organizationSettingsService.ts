@@ -45,7 +45,7 @@ class OrganizationSettingsService {
   getDefaultSettings(): OrganizationSettings {
     return {
       // Payment Settings
-      paymentDueDate: 'first_day',
+      paymentDueDate: 'last_day',
       allowStandardUserPastPayments: false,
       requireAdminApprovalForPastPayments: true,
       maxPastPaymentDays: 30,

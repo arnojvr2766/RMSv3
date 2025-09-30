@@ -249,6 +249,7 @@ const Payments: React.FC = () => {
     const facilityId = searchParams.get('facility');
     const roomId = searchParams.get('room');
     const renterId = searchParams.get('renter');
+    const status = searchParams.get('status');
     
     if (facilityId && facilities.length > 0) {
       // Auto-apply facility filter when navigating from Facilities page
@@ -263,6 +264,11 @@ const Payments: React.FC = () => {
     if (renterId && renters.length > 0) {
       // Auto-apply renter filter when navigating from Renters page
       setFilterRenters([renterId]);
+    }
+    
+    if (status) {
+      // Auto-apply status filter when navigating from Dashboard (e.g., overdue payments)
+      setFilterStatuses([status]);
     }
   }, [searchParams, facilities, rooms, renters]);
 
@@ -787,31 +793,31 @@ const Payments: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-secondary-900 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-secondary-900">
+      <div className="w-full">
         {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
+        <div className="mb-6 md:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-secondary-900" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary-500 rounded-lg flex items-center justify-center">
+                <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-secondary-900" />
               </div>
-              <h1 className="text-3xl font-bold text-white">Payments</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">Payments</h1>
             </div>
             {canManagePayments && (
-              <Button onClick={handleCapturePayment}>
+              <Button onClick={handleCapturePayment} className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Capture Payment
               </Button>
             )}
           </div>
-          <p className="text-gray-400 text-lg">
+          <p className="text-gray-400 text-sm sm:text-lg">
             Manage rental payments, track income, and handle payment processing
           </p>
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-6 mb-6 md:mb-8">
           <Card className="p-6">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
@@ -1317,8 +1323,10 @@ const Payments: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <>
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-700">
                     <th 
@@ -1511,7 +1519,107 @@ const Payments: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-2">
+                {getSortedTransactions().map((transaction) => (
+                  <Card key={transaction.id} className="p-3">
+                    <div className="space-y-2">
+                      {/* Header Row */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-white truncate">
+                            {transaction.facilityName}
+                          </h3>
+                          <p className="text-xs text-gray-400">
+                            Room {transaction.roomNumber} • {transaction.renterName}
+                          </p>
+                        </div>
+                        <div className="text-right ml-2">
+                          <div className="text-base font-bold text-white">
+                            R{transaction.amount.toLocaleString()}
+                          </div>
+                          {transaction.status === 'partial' && transaction.paidAmount && (
+                            <div className="text-xs text-gray-400">
+                              Paid: R{transaction.paidAmount.toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Details Row */}
+                      <div className="flex justify-between items-center">
+                        <div className="flex flex-col space-y-1">
+                          <span className="text-xs text-gray-300">
+                            {transaction.month}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(transaction.type)}`}>
+                            {transaction.type.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(transaction.status)}`}>
+                            {transaction.status.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Payment Info Row */}
+                      <div className="flex justify-between items-center pt-2 border-t border-gray-700">
+                        <div className="text-xs text-gray-400">
+                          {transaction.paidDate ? (
+                            <span>Paid: {formatDate(transaction.paidDate)}</span>
+                          ) : (
+                            <span>Due: {formatDate(transaction.dueDate)}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400 capitalize">
+                          {transaction.paymentMethod?.replace('_', ' ') || 'N/A'}
+                        </div>
+                      </div>
+
+                      {/* Actions Row */}
+                      <div className="flex justify-end space-x-1 pt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditPayment(transaction)}
+                          className="text-xs"
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          View
+                        </Button>
+                        
+                        {canManagePayments && (transaction.status === 'overdue' || transaction.status === 'pending' || transaction.status === 'partial') && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleCaptureSpecificPayment(transaction)}
+                            className="text-xs"
+                          >
+                            <DollarSign className="w-3 h-3 mr-1" />
+                            Pay
+                          </Button>
+                        )}
+                        
+                        {canManagePayments && (transaction.status === 'paid' || transaction.status === 'partial') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditPayment(transaction)}
+                            className="text-xs"
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
         </Card>
 

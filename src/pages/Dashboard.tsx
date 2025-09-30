@@ -35,28 +35,28 @@ const Dashboard: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">
+        <div className="mb-4 md:mb-8">
+          <h1 className="text-xl md:text-3xl font-bold text-white">
             Rental Management Dashboard
           </h1>
-          <p className="mt-2 text-secondary">
+          <p className="mt-1 md:mt-2 text-xs md:text-base text-secondary">
             Welcome back! Here's what's happening with your properties.
           </p>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-8">
           <Card>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-secondary">Total Income</p>
-                <p className="text-2xl font-bold text-white">R {stats.totalIncome.toLocaleString()}</p>
-                <p className="text-sm text-success">+12% from last month</p>
+                <p className="text-xs md:text-sm font-medium text-secondary">Total Income</p>
+                <p className="text-lg md:text-2xl font-bold text-white">R {stats.totalIncome.toLocaleString()}</p>
+                <p className="text-xs md:text-sm text-success">+12% from last month</p>
               </div>
-              <div className="p-3 bg-primary-500/20 rounded-full">
-                <CreditCard className="w-6 h-6 text-primary-500" />
+              <div className="p-2 md:p-3 bg-primary-500/20 rounded-full">
+                <CreditCard className="w-5 h-5 md:w-6 md:h-6 text-primary-500" />
               </div>
             </div>
           </Card>
@@ -64,25 +64,12 @@ const Dashboard: React.FC = () => {
           <Card>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-secondary">Occupancy Rate</p>
-                <p className="text-2xl font-bold text-white">{stats.occupancyRate}%</p>
-                <p className="text-sm text-success">+3% from last month</p>
+                <p className="text-xs md:text-sm font-medium text-secondary">Occupancy Rate</p>
+                <p className="text-lg md:text-2xl font-bold text-white">{stats.occupancyRate}%</p>
+                <p className="text-xs md:text-sm text-success">+3% from last month</p>
               </div>
-              <div className="p-3 bg-accent-green-500/20 rounded-full">
-                <Building className="w-6 h-6 text-accent-green-500" />
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-secondary">Overdue Payments</p>
-                <p className="text-2xl font-bold text-error">{stats.overduePayments}</p>
-                <p className="text-sm text-error">Needs attention</p>
-              </div>
-              <div className="p-3 bg-error/20 rounded-full">
-                <AlertCircle className="w-6 h-6 text-error" />
+              <div className="p-2 md:p-3 bg-accent-green-500/20 rounded-full">
+                <Building className="w-5 h-5 md:w-6 md:h-6 text-accent-green-500" />
               </div>
             </div>
           </Card>
@@ -90,21 +77,34 @@ const Dashboard: React.FC = () => {
           <Card>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-secondary">Pending Approvals</p>
-                <p className="text-2xl font-bold text-white">{stats.pendingApprovals}</p>
-                <p className="text-sm text-warning">Awaiting review</p>
+                <p className="text-xs md:text-sm font-medium text-secondary">Overdue Payments</p>
+                <p className="text-lg md:text-2xl font-bold text-error">{stats.overduePayments}</p>
+                <p className="text-xs md:text-sm text-error">Needs attention</p>
               </div>
-              <div className="p-3 bg-warning/20 rounded-full">
-                <CheckCircle className="w-6 h-6 text-warning" />
+              <div className="p-2 md:p-3 bg-error/20 rounded-full">
+                <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-error" />
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs md:text-sm font-medium text-secondary">Pending Approvals</p>
+                <p className="text-lg md:text-2xl font-bold text-white">{stats.pendingApprovals}</p>
+                <p className="text-xs md:text-sm text-warning">Awaiting review</p>
+              </div>
+              <div className="p-2 md:p-3 bg-warning/20 rounded-full">
+                <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-warning" />
               </div>
             </div>
           </Card>
         </div>
 
         {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4">Quick Actions</h2>
-          <div className="flex flex-wrap gap-3">
+        <div className="mb-4 md:mb-8">
+          <h2 className="text-base md:text-xl font-semibold text-white mb-3 md:mb-4">Quick Actions</h2>
+          <div className="flex flex-wrap gap-2 md:gap-3">
             <Button variant="primary">
               <CreditCard className="w-4 h-4 mr-2" />
               New Payment
@@ -125,7 +125,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Recent Payments */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <Card>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-white">Recent Payments</h3>

@@ -155,8 +155,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
       {/* Sidebar */}
       <div className={`
         fixed top-0 left-0 h-screen bg-gray-800 border-r border-gray-700 z-50 transition-all duration-300 ease-in-out
-        ${isOpen ? 'w-80' : 'w-16'}
-        lg:relative lg:z-auto
+        ${isOpen ? 'w-80' : 'w-0'}
+        lg:relative lg:z-auto lg:w-16 lg:transition-all lg:duration-300 lg:ease-in-out
+        ${isOpen ? 'lg:w-80' : 'lg:w-16'}
       `}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">

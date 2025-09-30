@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, User, Building2, DoorClosed, X, CreditCard } from 'lucide-react';
+import { FileText, User, Building2, DoorClosed, X, CreditCard, AlertTriangle } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { renterService, facilityService, roomService, paymentScheduleService } from '../../services/firebaseService';
@@ -82,9 +82,10 @@ interface LeaseViewProps {
   lease: LeaseAgreement;
   onClose: () => void;
   onCapturePayment?: () => void;
+  onTerminateLease?: () => void;
 }
 
-const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment }) => {
+const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment, onTerminateLease }) => {
   const [renter, setRenter] = useState<Renter | null>(null);
   const [facility, setFacility] = useState<Facility | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
@@ -389,7 +390,13 @@ const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment 
             Payments
           </Button>
         )}
-        <Button variant="secondary" onClick={onClose}>
+        {onTerminateLease && lease.status === 'active' && (
+          <Button variant="secondary" onClick={onTerminateLease}>
+            <AlertTriangle className="w-4 h-4 mr-2" />
+            Terminate Lease
+          </Button>
+        )}
+        <Button variant="ghost" onClick={onClose}>
           Close
         </Button>
       </div>

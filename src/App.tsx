@@ -47,7 +47,7 @@ const AppContent: React.FC = () => {
             <Header onMenuToggle={handleMenuToggle} />
             <div className="flex">
               <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-              <main className="flex-1 p-6">
+              <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                 <Dashboard />
               </main>
             </div>
@@ -61,7 +61,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Facilities />
                       </main>
                     </div>
@@ -75,7 +75,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Rooms />
                       </main>
                     </div>
@@ -89,7 +89,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Renters />
                       </main>
                     </div>
@@ -103,7 +103,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Leases />
                       </main>
                     </div>
@@ -117,7 +117,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Payments />
                       </main>
                     </div>
@@ -131,7 +131,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Maintenance />
                       </main>
                     </div>
@@ -145,7 +145,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Penalties />
                       </main>
                     </div>
@@ -159,7 +159,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Settings />
                       </main>
                     </div>
@@ -173,7 +173,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <Complaints />
                       </main>
                     </div>
@@ -187,7 +187,7 @@ const AppContent: React.FC = () => {
                     <Header onMenuToggle={handleMenuToggle} />
                     <div className="flex">
                       <Sidebar isOpen={sidebarOpen} onToggle={handleMenuToggle} />
-                      <main className="flex-1 p-6">
+                      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8">
                         <PaymentApprovals />
                       </main>
                     </div>

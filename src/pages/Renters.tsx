@@ -225,73 +225,74 @@ const Renters: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-secondary-900 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-3">
-            <User className="w-8 h-8 text-primary-500" />
+    <div className="min-h-screen bg-secondary-900 p-3 md:p-6">
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-4 md:mb-8">
+          <div className="flex items-center space-x-2 md:space-x-3">
+            <User className="w-6 h-6 md:w-8 md:h-8 text-primary-500" />
             <div>
-              <h1 className="text-3xl font-bold text-white">Renters</h1>
-              <p className="text-gray-400">Manage renter profiles, view lease status, track tenant information</p>
+              <h1 className="text-lg md:text-3xl font-bold text-white">Renters</h1>
+              <p className="text-xs md:text-base text-gray-400">Manage renter profiles, view lease status, track tenant information</p>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 md:space-x-4">
             {/* View Mode Toggle */}
             <div className="flex items-center bg-gray-700 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('cards')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                className={`flex items-center space-x-1 md:space-x-2 px-2 md:px-3 py-1 md:py-2 rounded-md transition-colors ${
                   viewMode === 'cards' 
                     ? 'bg-primary-500 text-white' 
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                <Grid3X3 className="w-4 h-4" />
-                <span className="text-sm font-medium">Cards</span>
+                <Grid3X3 className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="text-xs md:text-sm font-medium">Cards</span>
               </button>
               <button
                 onClick={() => setViewMode('table')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-colors ${
+                className={`flex items-center space-x-1 md:space-x-2 px-2 md:px-3 py-1 md:py-2 rounded-md transition-colors ${
                   viewMode === 'table' 
                     ? 'bg-primary-500 text-white' 
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                <List className="w-4 h-4" />
-                <span className="text-sm font-medium">Table</span>
+                <List className="w-3 h-3 md:w-4 md:h-4" />
+                <span className="text-xs md:text-sm font-medium">Table</span>
               </button>
             </div>
             <Button 
               variant="primary"
+              size="sm"
               onClick={() => {
                 setEditingRenter(null); // No renter to edit, creating new one
                 setShowRenterForm(true);
               }}
             >
-              <UserPlus className="w-4 h-4 mr-2" />
-              Add New Renter
+              <UserPlus className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Add New Renter</span>
             </Button>
           </div>
         </div>
 
         {/* Filters */}
-        <Card className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="mb-4 md:mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3 h-3 md:w-4 md:h-4" />
               <input
                 type="text"
                 placeholder="Search renters..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               />
             </div>
             
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="px-2 md:px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="">All Statuses</option>
               <option value="active">Active</option>
@@ -302,7 +303,7 @@ const Renters: React.FC = () => {
             <select
               value={filterFacility}
               onChange={(e) => setFilterFacility(e.target.value)}
-              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="px-2 md:px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="">All Facilities</option>
               {facilities.map(facility => (
@@ -314,58 +315,59 @@ const Renters: React.FC = () => {
 
             <Button 
               variant="secondary" 
+              size="sm"
               onClick={() => {
                 setFilterStatus('');
                 setFilterFacility('');
                 setSearchTerm('');
               }}
             >
-              <Filter className="w-4 h-4 mr-2" />
-              Clear Filters
+              <Filter className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+              <span className="text-xs md:text-sm">Clear</span>
             </Button>
           </div>
         </Card>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
           <Card className="bg-primary-500/10 border-primary-500/30">
             <div className="text-center">
-              <h3 className="text-2xl font-bold text-primary-500">{renters.length}</h3>
-              <p className="text-gray-400">Total Renters</p>
+              <h3 className="text-lg md:text-2xl font-bold text-primary-500">{renters.length}</h3>
+              <p className="text-xs md:text-sm text-gray-400">Total Renters</p>
             </div>
           </Card>
           <Card className="bg-green-500/10 border-green-500/30">
             <div className="text-center">
-              <h3 className="text-2xl font-bold text-green-500">
+              <h3 className="text-lg md:text-2xl font-bold text-green-500">
                 {renters.filter(r => getRenterDisplayStatus(r) === 'active').length}
               </h3>
-              <p className="text-gray-400">Active Renters</p>
+              <p className="text-xs md:text-sm text-gray-400">Active Renters</p>
             </div>
           </Card>
           <Card className="bg-blue-500/10 border-blue-500/30">
             <div className="text-center">
-              <h3 className="text-2xl font-bold text-blue-500">
+              <h3 className="text-lg md:text-2xl font-bold text-blue-500">
                 {renters.filter(r => getRenterLease(r.id!)).length}
               </h3>
-              <p className="text-gray-400">Currently Renting</p>
+              <p className="text-xs md:text-sm text-gray-400">Currently Renting</p>
             </div>
           </Card>
           <Card className="bg-red-500/10 border-red-500/30">
             <div className="text-center">
-              <h3 className="text-2xl font-bold text-red-500">
+              <h3 className="text-lg md:text-2xl font-bold text-red-500">
                 {renters.filter(r => getRenterDisplayStatus(r) === 'blacklisted').length}
               </h3>
-              <p className="text-gray-400">Blacklisted</p>
+              <p className="text-xs md:text-sm text-gray-400">Blacklisted</p>
             </div>
           </Card>
         </div>
 
         {/* Renters List */}
         {filteredRenters.length === 0 ? (
-          <Card className="text-center py-8">
-            <User className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">No Renters Found</h2>
-            <p className="text-gray-400">
+          <Card className="text-center py-8 md:py-12">
+            <User className="w-12 h-12 md:w-16 md:h-16 text-gray-500 mx-auto mb-3 md:mb-4" />
+            <h2 className="text-lg md:text-xl font-semibold text-white mb-2">No Renters Found</h2>
+            <p className="text-sm md:text-base text-gray-400">
               {renters.length === 0 
                 ? "No renters have been added yet."
                 : "No renters match your current filters."
@@ -373,39 +375,39 @@ const Renters: React.FC = () => {
             </p>
           </Card>
         ) : viewMode === 'cards' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
             {filteredRenters.map((renter) => {
               const activeLease = getRenterLease(renter.id!);
               const displayStatus = getRenterDisplayStatus(renter);
               return (
                 <Card key={renter.id} className="hover:bg-gray-700 transition-colors">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center">
-                        <User className="w-6 h-6 text-white" />
+                  <div className="flex items-start justify-between mb-3 md:mb-4">
+                    <div className="flex items-center space-x-2 md:space-x-3">
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-primary-500 rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5 md:w-6 md:h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-white font-semibold">
+                        <h3 className="text-base md:text-lg font-semibold text-white">
                           {renter.personalInfo.firstName} {renter.personalInfo.lastName}
                         </h3>
-                        <p className="text-gray-400 text-sm">ID: {renter.personalInfo.idNumber}</p>
+                        <p className="text-gray-400 text-xs md:text-sm">ID: {renter.personalInfo.idNumber}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(displayStatus)}`}>
+                    <span className={`px-2 md:px-3 py-1 rounded-full text-xs md:text-sm font-medium ${getStatusColor(displayStatus)}`}>
                       {displayStatus.toUpperCase()}
                     </span>
                   </div>
 
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center space-x-3">
-                      <Phone className="w-4 h-4 text-primary-500" />
-                      <span className="text-gray-400">Phone:</span>
-                      <span className="text-white">{renter.personalInfo.phone}</span>
+                  <div className="space-y-2 md:space-y-3 mb-3 md:mb-4">
+                    <div className="flex items-center space-x-2 md:space-x-3">
+                      <Phone className="w-3 h-3 md:w-4 md:h-4 text-primary-500" />
+                      <span className="text-gray-400 text-xs md:text-sm">Phone:</span>
+                      <span className="text-white text-xs md:text-sm">{renter.personalInfo.phone}</span>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <Mail className="w-4 h-4 text-accent-blue-500" />
-                      <span className="text-gray-400">Email:</span>
-                      <span className="text-white">{renter.personalInfo.email}</span>
+                    <div className="flex items-center space-x-2 md:space-x-3">
+                      <Mail className="w-3 h-3 md:w-4 md:h-4 text-accent-blue-500" />
+                      <span className="text-gray-400 text-xs md:text-sm">Email:</span>
+                      <span className="text-white text-xs md:text-sm">{renter.personalInfo.email}</span>
                     </div>
                     
                     {activeLease ? (

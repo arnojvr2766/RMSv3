@@ -124,20 +124,18 @@ const RenterSearchForm: React.FC<RenterSearchFormProps> = ({ onRenterSelected, o
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Required fields validation
+    // Only first name and last name are required
     if (!newRenterData.firstName.trim()) newErrors.firstName = 'First name is required';
     if (!newRenterData.lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (!newRenterData.idNumber.trim()) newErrors.idNumber = 'ID number is required';
-    if (!newRenterData.phone.trim()) newErrors.phone = 'Phone number is required';
-    if (!newRenterData.email.trim()) newErrors.email = 'Email is required';
-    if (!newRenterData.monthlyIncome || newRenterData.monthlyIncome <= 0) {
-      newErrors.monthlyIncome = 'Monthly income must be greater than 0';
-    }
 
-    // Email validation
+    // Optional field validation (only if field has content)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (newRenterData.email && !emailRegex.test(newRenterData.email)) {
       newErrors.email = 'Please enter a valid email address';
+    }
+    
+    if (newRenterData.monthlyIncome < 0) {
+      newErrors.monthlyIncome = 'Monthly income cannot be negative';
     }
 
     setErrors(newErrors);
@@ -154,7 +152,7 @@ const RenterSearchForm: React.FC<RenterSearchFormProps> = ({ onRenterSelected, o
           firstName: newRenterData.firstName.trim(),
           lastName: newRenterData.lastName.trim(),
           idNumber: newRenterData.idNumber.trim(),
-          dateOfBirth: Timestamp.fromDate(new Date(newRenterData.dateOfBirth)),
+          dateOfBirth: newRenterData.dateOfBirth ? Timestamp.fromDate(new Date(newRenterData.dateOfBirth)) : null,
           phone: newRenterData.phone.trim(),
           email: newRenterData.email.trim(),
           emergencyContact: {
@@ -241,14 +239,12 @@ const RenterSearchForm: React.FC<RenterSearchFormProps> = ({ onRenterSelected, o
                 value={newRenterData.idNumber}
                 onChange={(e) => handleInputChange('idNumber', e.target.value)}
                 error={errors.idNumber}
-                required
               />
               <Input
                 label="Date of Birth"
                 type="date"
                 value={newRenterData.dateOfBirth}
                 onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                required
               />
               <div className="grid grid-cols-2 gap-4">
                 <Input
@@ -256,7 +252,6 @@ const RenterSearchForm: React.FC<RenterSearchFormProps> = ({ onRenterSelected, o
                   value={newRenterData.phone}
                   onChange={(e) => handleInputChange('phone', e.target.value)}
                   error={errors.phone}
-                  required
                 />
                 <Input
                   label="Email"
@@ -264,7 +259,6 @@ const RenterSearchForm: React.FC<RenterSearchFormProps> = ({ onRenterSelected, o
                   value={newRenterData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   error={errors.email}
-                  required
                 />
               </div>
             </div>
@@ -290,7 +284,6 @@ const RenterSearchForm: React.FC<RenterSearchFormProps> = ({ onRenterSelected, o
                 value={newRenterData.monthlyIncome}
                 onChange={(e) => handleInputChange('monthlyIncome', parseFloat(e.target.value) || 0)}
                 error={errors.monthlyIncome}
-                required
                 min="0"
               />
               <Input

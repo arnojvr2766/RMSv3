@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { DoorClosed, Plus, Edit, Trash2, Building2, ArrowLeft, UserPlus, FileText, Eye, DollarSign, Grid3X3, List, Filter, ChevronDown, ChevronUp, AlertTriangle, Clock, CheckCircle, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRole } from '../contexts/RoleContext';
-import { useSettings } from '../contexts/SettingsContext';
+import { useOrganizationSettings } from '../contexts/OrganizationSettingsContext';
 import { facilityService, roomService, leaseService, paymentScheduleService, renterService } from '../services/firebaseService';
 import { facilityStatsService } from '../services/facilityStatsService';
 import Button from '../components/ui/Button';
@@ -12,6 +12,7 @@ import RoomForm from '../components/forms/RoomForm';
 import RenterSearchForm from '../components/forms/RenterSearchForm';
 import LeaseForm from '../components/forms/LeaseForm';
 import LeaseView from '../components/forms/LeaseView';
+import LeaseTerminationForm from '../components/forms/LeaseTerminationForm';
 import PaymentCapture from '../components/forms/PaymentCapture';
 import PenaltyBreakdown from '../components/forms/PenaltyBreakdown';
 import PenaltyPaymentCapture from '../components/forms/PenaltyPaymentCapture';
@@ -101,7 +102,7 @@ interface PaymentTransaction {
 const Rooms: React.FC = () => {
   console.log('Rooms component is loading...');
   const { currentRole, isSystemAdmin } = useRole();
-  const { allowStandardUserRooms } = useSettings();
+  const { allowStandardUserRooms } = useOrganizationSettings();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -114,15 +115,18 @@ const Rooms: React.FC = () => {
   const [facilityStats, setFacilityStats] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [showRoomForm, setShowRoomForm] = useState(false);
+  // Removed facility selection state - users should use the homepage for adding rooms
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [showRenterForm, setShowRenterForm] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [selectedRenter, setSelectedRenter] = useState<any>(null);
   const [showLeaseForm, setShowLeaseForm] = useState(false);
   const [renterFormStep, setRenterFormStep] = useState<'search' | 'lease'>('search');
+  const [modalFacility, setModalFacility] = useState<Facility | null>(null);
   const [showLeaseView, setShowLeaseView] = useState(false);
   const [selectedLease, setSelectedLease] = useState<any>(null);
   const [showPaymentCapture, setShowPaymentCapture] = useState(false);
+  const [showLeaseTermination, setShowLeaseTermination] = useState(false);
   
   const [showPenaltyBreakdown, setShowPenaltyBreakdown] = useState(false);
   const [selectedPenaltyTransaction, setSelectedPenaltyTransaction] = useState<PaymentTransaction | null>(null);
@@ -163,8 +167,10 @@ const Rooms: React.FC = () => {
   useEffect(() => {
     const facilityId = searchParams.get('facility');
     const view = searchParams.get('view');
+    const action = searchParams.get('action');
     console.log('Rooms page - facilityId from URL:', facilityId);
     console.log('Rooms page - view from URL:', view);
+    console.log('Rooms page - action from URL:', action);
     console.log('Rooms page - facilities loaded:', facilities.length);
     
     if (facilityId && facilities.length > 0) {
@@ -178,6 +184,14 @@ const Rooms: React.FC = () => {
           // Cross-navigation: stay in filter mode but apply facility filter
           setIsFilterMode(true);
           setShowAllFacilities(false); // This will filter to show only this facility's rooms
+          
+          // If action is addRoom, automatically open the room form
+          if (action === 'addRoom') {
+            console.log('🏠 Auto-opening room form for facility:', facility.name);
+            setTimeout(() => {
+              setShowRoomForm(true);
+            }, 300); // Small delay to ensure the page is fully loaded
+          }
         } else {
           // Individual facility management: load rooms and switch to individual view
         loadRooms(facilityId);
@@ -194,6 +208,26 @@ const Rooms: React.FC = () => {
     } else {
       // No facility in URL, stay in filter mode
       setIsFilterMode(true);
+    }
+    
+    // Check if we have a stored facility ID to open room form for
+    const storedFacilityId = localStorage.getItem('openRoomFormForFacility');
+    if (storedFacilityId && facilities.length > 0) {
+      const facility = facilities.find(f => f.id === storedFacilityId);
+      if (facility) {
+        console.log('🏠 Found stored facility to open room form for:', facility.name);
+        setSelectedFacility(facility);
+        setIsFilterMode(true);
+        setShowAllFacilities(false);
+        
+        // Clear the stored ID to prevent reopening on page refresh
+        localStorage.removeItem('openRoomFormForFacility');
+        
+        // Open the room form with a small delay
+        setTimeout(() => {
+          setShowRoomForm(true);
+        }, 300);
+      }
     }
   }, [searchParams, facilities]);
 
@@ -381,10 +415,16 @@ const Rooms: React.FC = () => {
   };
 
   const handleAddRenter = (room: Room) => {
+    console.log('handleAddRenter called for room:', room);
+    console.log('Current selectedFacility:', selectedFacility);
     setSelectedRoom(room);
     setSelectedRenter(null);
     setRenterFormStep('search');
     setShowRenterForm(true);
+    console.log('Renter form should now be visible');
+    console.log('showRenterForm:', true);
+    console.log('selectedRoom:', room);
+    console.log('modalFacility will be set by the caller');
   };
 
   const handleRenterSelected = (renter: any) => {
@@ -398,6 +438,7 @@ const Rooms: React.FC = () => {
     setSelectedRoom(null);
     setSelectedRenter(null);
     setRenterFormStep('search');
+    setModalFacility(null);
     // Reload rooms to update status
     if (selectedFacility?.id) {
       loadRooms(selectedFacility.id);
@@ -407,6 +448,11 @@ const Rooms: React.FC = () => {
   const handleBackToRenterSearch = () => {
     setSelectedRenter(null);
     setRenterFormStep('search');
+  };
+
+  const handleTerminateLease = () => {
+    setShowLeaseView(false);
+    setShowLeaseTermination(true);
   };
 
   const handleViewLease = async (room: Room) => {
@@ -701,7 +747,8 @@ const Rooms: React.FC = () => {
     facility: Facility | undefined;
     onViewRoom: () => void;
     onCapturePayment: () => void;
-  }> = ({ room, facility, onViewRoom, onCapturePayment }) => {
+    onAddRenter: () => void;
+  }> = ({ room, facility, onViewRoom, onCapturePayment, onAddRenter }) => {
     const [paymentStatus, setPaymentStatus] = useState<{
       status: string;
       lease: any;
@@ -799,11 +846,22 @@ const Rooms: React.FC = () => {
             >
               <Eye className="w-4 h-4" />
             </Button>
+            {room.status === 'available' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onAddRenter}
+                title="Add Renter"
+              >
+                <UserPlus className="w-4 h-4" />
+              </Button>
+            )}
             {room.status === 'occupied' && paymentStatus?.lease && (
               <Button
                 variant="primary"
                 size="sm"
                 onClick={onCapturePayment}
+                title="Capture Payment"
               >
                 <DollarSign className="w-4 h-4" />
               </Button>
@@ -855,6 +913,8 @@ const Rooms: React.FC = () => {
                 <Grid3X3 className="w-4 h-4 mr-2" />
                 All Rooms
               </Button>
+              
+              {/* Add Room button removed - users should use the homepage */}
             </div>
           </div>
 
@@ -897,6 +957,7 @@ const Rooms: React.FC = () => {
                 >
                   <button 
                     className="w-full text-left cursor-pointer"
+                    data-facility-id={facility.id}
                     onClick={() => {
                       console.log('Facility clicked:', facility.name);
                       setShowAllFacilities(false);
@@ -1169,6 +1230,13 @@ const Rooms: React.FC = () => {
                             alert('Failed to load lease agreement. Please try again.');
                           }
                         }}
+                        onAddRenter={() => {
+                          console.log('Add Renter button clicked!');
+                          console.log('Facility:', facility);
+                          console.log('Room:', room);
+                          setModalFacility(facility!);
+                          handleAddRenter(room);
+                        }}
                       />
                     );
                   })}
@@ -1177,6 +1245,39 @@ const Rooms: React.FC = () => {
             </div>
           </Card>
         </div>
+
+        {/* Add Renter Workflow (table/filter branch) */}
+        {showRenterForm && selectedRoom && modalFacility && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" style={{zIndex: 9999}}>
+            <div className="bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto p-6">
+              {renterFormStep === 'search' ? (
+                <RenterSearchForm
+                  onRenterSelected={handleRenterSelected}
+                  onCancel={() => {
+                    setShowRenterForm(false);
+                    setSelectedRoom(null);
+                    setModalFacility(null);
+                  }}
+                />
+              ) : renterFormStep === 'lease' && selectedRenter ? (
+                <LeaseForm
+                  facility={modalFacility}
+                  room={selectedRoom}
+                  renter={selectedRenter}
+                  onSuccess={handleLeaseSuccess}
+                  onCancel={() => {
+                    setShowRenterForm(false);
+                    setSelectedRoom(null);
+                    setSelectedRenter(null);
+                    setRenterFormStep('search');
+                    setModalFacility(null);
+                  }}
+                  onBack={handleBackToRenterSearch}
+                />
+              ) : null}
+            </div>
+          </div>
+        )}
 
         {/* Payment Capture Modal - WITHOUT React Portal */}
         {showPaymentCapture && selectedLease && (
@@ -1856,32 +1957,32 @@ const Rooms: React.FC = () => {
 
   // Show room management for selected facility
   return (
-    <div className="min-h-screen bg-secondary-900 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={handleBackToFacilities}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Facilities
+    <div className="min-h-screen bg-secondary-900 p-3 md:p-6">
+      <div className="w-full">
+        <div className="flex items-center justify-between mb-4 md:mb-6">
+          <div className="flex items-center space-x-2 md:space-x-4">
+            <Button variant="ghost" onClick={handleBackToFacilities} size="sm">
+              <ArrowLeft className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+              <span className="hidden sm:inline">Back to Facilities</span>
             </Button>
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">
+              <h1 className="text-lg md:text-3xl font-bold text-white mb-1 md:mb-2">
                 {selectedFacility.name} - {viewMode === 'rooms' ? 'Rooms' : 'Payments'}
               </h1>
-              <p className="text-gray-400">{selectedFacility.address}</p>
+              <p className="text-xs md:text-base text-gray-400">{selectedFacility.address}</p>
             </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 md:space-x-3">
             {/* View Toggle */}
             <div className="flex bg-gray-700 rounded-lg p-1">
               <Button
                 variant={viewMode === 'rooms' ? 'primary' : 'ghost'}
                 size="sm"
                 onClick={() => setViewMode('rooms')}
-                className="px-3"
+                className="px-2 md:px-3"
               >
-                <Grid3X3 className="w-4 h-4 mr-1" />
-                Rooms
+                <Grid3X3 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                <span className="text-xs md:text-sm">Rooms</span>
               </Button>
               <Button
                 variant={viewMode === 'payments' ? 'primary' : 'ghost'}
@@ -1890,17 +1991,17 @@ const Rooms: React.FC = () => {
                   setViewMode('payments');
                   loadPaymentTransactions(selectedFacility.id!);
                 }}
-                className="px-3"
+                className="px-2 md:px-3"
               >
-                <DollarSign className="w-4 h-4 mr-1" />
-                Payments
+                <DollarSign className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                <span className="text-xs md:text-sm">Payments</span>
               </Button>
             </div>
             
             {viewMode === 'rooms' && (
-              <Button onClick={() => setShowRoomForm(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Room
+              <Button onClick={() => setShowRoomForm(true)} size="sm">
+                <Plus className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Add Room</span>
               </Button>
             )}
           </div>
@@ -1909,34 +2010,34 @@ const Rooms: React.FC = () => {
         {viewMode === 'rooms' ? (
           <>
             {isLoading ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+              <div className="flex justify-center items-center py-8 md:py-12">
+                <div className="animate-spin rounded-full h-6 w-6 md:h-8 md:w-8 border-b-2 border-primary-500"></div>
               </div>
             ) : rooms.length === 0 ? (
-              <Card className="text-center py-12">
-                <DoorClosed className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-white mb-2">No Rooms Found</h2>
-                <p className="text-gray-400 mb-6">
+              <Card className="text-center py-8 md:py-12">
+                <DoorClosed className="w-12 h-12 md:w-16 md:h-16 text-gray-500 mx-auto mb-3 md:mb-4" />
+                <h2 className="text-lg md:text-xl font-semibold text-white mb-2">No Rooms Found</h2>
+                <p className="text-sm md:text-base text-gray-400 mb-4 md:mb-6">
                   Get started by adding the first room to {selectedFacility.name}
                 </p>
-                <Button onClick={() => setShowRoomForm(true)}>
+                <Button onClick={() => setShowRoomForm(true)} size="sm">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Your First Room
                 </Button>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
                 {rooms.map((room) => (
                   <Card key={room.id} className="hover:bg-gray-700 transition-colors">
                     <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 rounded-lg bg-accent-blue-500 flex items-center justify-center">
-                            <DoorClosed className="w-6 h-6 text-white" />
+                      <div className="flex items-center justify-between mb-3 md:mb-4">
+                        <div className="flex items-center space-x-2 md:space-x-3">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-accent-blue-500 flex items-center justify-center">
+                            <DoorClosed className="w-5 h-5 md:w-6 md:h-6 text-white" />
                           </div>
                           <div>
-                            <h3 className="text-lg font-semibold text-white">Room {room.roomNumber}</h3>
-                            <p className="text-gray-400 text-sm capitalize">{room.type} - {room.capacity} guests</p>
+                            <h3 className="text-base md:text-lg font-semibold text-white">Room {room.roomNumber}</h3>
+                            <p className="text-gray-400 text-xs md:text-sm capitalize">{room.type} - {room.capacity} guests</p>
                           </div>
                         </div>
                         <div className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1952,21 +2053,21 @@ const Rooms: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="space-y-2 mb-4">
-                        <div className="flex justify-between text-sm">
+                      <div className="space-y-1 md:space-y-2 mb-3 md:mb-4">
+                        <div className="flex justify-between text-xs md:text-sm">
                           <span className="text-gray-400">Monthly Rent:</span>
                           <span className="text-white">R{room.monthlyRent}</span>
                         </div>
-                        <div className="flex justify-between text-sm">
+                        <div className="flex justify-between text-xs md:text-sm">
                           <span className="text-gray-400">Deposit:</span>
                           <span className="text-white">R{room.depositAmount}</span>
                         </div>
                         {room.description && (
-                          <p className="text-gray-400 text-sm">{room.description}</p>
+                          <p className="text-gray-400 text-xs md:text-sm">{room.description}</p>
                         )}
                       </div>
 
-                      <div className="border-t border-gray-700 pt-4">
+                      <div className="border-t border-gray-700 pt-3 md:pt-4">
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <span className="text-gray-400">Late Fee:</span>
@@ -1978,19 +2079,19 @@ const Rooms: React.FC = () => {
                           </div>
                         </div>
                         {room.businessRules.usesFacilityDefaults && (
-                          <p className="text-xs text-gray-500 mt-2">Using facility defaults</p>
+                          <p className="text-xs text-gray-500 mt-1 md:mt-2">Using facility defaults</p>
                         )}
                       </div>
 
-                      <div className="flex justify-end space-x-2 mt-4 pt-4 border-t border-gray-700">
+                      <div className="flex justify-end space-x-1 md:space-x-2 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-gray-700">
                         {room.status === 'available' && (
                           <Button 
                             variant="primary" 
                             size="sm"
                             onClick={() => handleAddRenter(room)}
                           >
-                            <UserPlus className="w-4 h-4 mr-1" />
-                            Add Renter
+                            <UserPlus className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                            <span className="text-xs md:text-sm">Add Renter</span>
                           </Button>
                         )}
                         {room.status === 'occupied' && (
@@ -2000,21 +2101,21 @@ const Rooms: React.FC = () => {
                               size="sm"
                               onClick={() => handleViewLease(room)}
                             >
-                              <FileText className="w-4 h-4 mr-1" />
-                              View Lease
+                              <FileText className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                              <span className="text-xs md:text-sm">View Lease</span>
                             </Button>
                             <Button
                               variant="primary"
                               size="sm"
                               onClick={() => handleCapturePayment(room)}
                             >
-                              <DollarSign className="w-4 h-4 mr-1" />
-                              Payments
+                              <DollarSign className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                              <span className="text-xs md:text-sm">Payments</span>
                             </Button>
                           </>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => handleEditRoom(room)}>
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-3 h-3 md:w-4 md:h-4" />
                         </Button>
                         <Button 
                           variant="ghost" 
@@ -2022,7 +2123,7 @@ const Rooms: React.FC = () => {
                           className="text-red-400 hover:text-red-300"
                           onClick={() => room.id && handleDeleteRoom(room.id)}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
                         </Button>
                       </div>
                     </div>
@@ -2290,6 +2391,7 @@ const Rooms: React.FC = () => {
           </div>
         )}
 
+
         {/* Room Form */}
         {showRoomForm && selectedFacility && (
           <RoomForm
@@ -2305,8 +2407,8 @@ const Rooms: React.FC = () => {
         )}
 
         {/* Add Renter Workflow */}
-        {showRenterForm && selectedRoom && selectedFacility && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        {showRenterForm && selectedRoom && modalFacility && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" style={{zIndex: 9999}}>
             <div className="bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto p-6">
               {renterFormStep === 'search' ? (
                 <RenterSearchForm
@@ -2314,11 +2416,12 @@ const Rooms: React.FC = () => {
                   onCancel={() => {
                     setShowRenterForm(false);
                     setSelectedRoom(null);
+                    setModalFacility(null);
                   }}
                 />
               ) : renterFormStep === 'lease' && selectedRenter ? (
                 <LeaseForm
-                  facility={selectedFacility}
+                  facility={modalFacility}
                   room={selectedRoom}
                   renter={selectedRenter}
                   onSuccess={handleLeaseSuccess}
@@ -2327,6 +2430,7 @@ const Rooms: React.FC = () => {
                     setSelectedRoom(null);
                     setSelectedRenter(null);
                     setRenterFormStep('search');
+                    setModalFacility(null);
                   }}
                   onBack={handleBackToRenterSearch}
                 />
@@ -2348,6 +2452,9 @@ const Rooms: React.FC = () => {
                 onCapturePayment={() => {
                   setShowLeaseView(false);
                   setShowPaymentCapture(true);
+                }}
+                onTerminateLease={() => {
+                  handleTerminateLease();
                 }}
               />
             </div>
@@ -2448,6 +2555,29 @@ const Rooms: React.FC = () => {
             }}
           />
         )}
+
+        {/* Lease Termination Modal */}
+        {showLeaseTermination && selectedLease && (
+          <LeaseTerminationForm
+            leaseId={selectedLease.id}
+            renterName={`${selectedLease.renter?.personalInfo?.firstName || ''} ${selectedLease.renter?.personalInfo?.lastName || ''}`}
+            roomNumber={selectedLease.room?.roomNumber || 'Unknown'}
+            facilityName={selectedLease.facility?.name || 'Unknown'}
+            onSuccess={() => {
+              setShowLeaseTermination(false);
+              setSelectedLease(null);
+              // Reload rooms to update status
+              if (selectedFacility?.id) {
+                loadRooms(selectedFacility.id);
+              }
+            }}
+            onCancel={() => {
+              setShowLeaseTermination(false);
+            }}
+          />
+        )}
+
+        {/* Facility Selection Modal removed - users should use the homepage */}
 
       </div>
     </div>

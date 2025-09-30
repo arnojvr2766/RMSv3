@@ -27,8 +27,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
 
   return (
     <header className="bg-gray-800 border-b border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+      <div className="w-full px-2 sm:px-4 lg:px-8">
+        <div className="flex justify-between items-center h-14 sm:h-16">
                  {/* Mobile Menu Button */}
                  <div className="flex items-center space-x-3">
                    <Button
@@ -41,14 +41,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                    </Button>
 
                    {/* Logo and Title */}
-                   <Link to="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                   <Link to="/" className="flex items-center space-x-2 sm:space-x-3 hover:opacity-80 transition-opacity">
                      <img 
                        src="/RentDesk.png" 
                        alt="RentDesk Logo" 
-                       className="w-10 h-10 rounded-lg"
+                       className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg"
                      />
-                     <div>
-                       <h1 className="text-xl font-bold text-white">
+                     <div className="hidden sm:block">
+                       <h1 className="text-lg sm:text-xl font-bold text-white">
                          RentDesk
                        </h1>
                        <p className="text-xs text-gray-400">
@@ -58,8 +58,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                    </Link>
                  </div>
 
-          {/* User Role Indicator */}
-          <div className="flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
+          {/* User Role Indicator - Hidden on mobile */}
+          <div className="hidden sm:flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
             <span className="text-xs text-gray-400">
               Role:
             </span>
@@ -73,7 +73,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-2">
             {isSystemAdmin && (
               <Button 
                 variant="ghost" 
@@ -88,8 +88,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
               <Bell className="w-4 h-4" />
             </Button>
             
-            {/* Connection Status */}
-            <div className="flex items-center space-x-1 px-2 py-1 bg-gray-700 rounded-full">
+            {/* Connection Status - Hidden on mobile */}
+            <div className="hidden sm:flex items-center space-x-1 px-2 py-1 bg-gray-700 rounded-full">
               {isOffline ? (
                 <>
                   <WifiOff className="w-3 h-3 text-red-400" />
@@ -109,18 +109,18 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
               </Button>
             </Link>
             
-            {/* User Info */}
-            <div className="flex items-center space-x-2 px-3 py-1 bg-gray-700 rounded-full">
+            {/* User Info - Simplified on mobile */}
+            <div className="flex items-center space-x-2 px-2 sm:px-3 py-1 bg-gray-700 rounded-full">
               {user?.photoURL ? (
                 <img 
                   src={user.photoURL} 
                   alt="User Avatar" 
-                  className="w-6 h-6 rounded-full"
+                  className="w-5 h-5 sm:w-6 sm:h-6 rounded-full"
                 />
               ) : (
                 <User className="w-4 h-4 text-gray-400" />
               )}
-              <span className="text-xs text-gray-300 max-w-32 truncate">
+              <span className="text-xs text-gray-300 max-w-20 sm:max-w-32 truncate hidden sm:block">
                 {user?.displayName || user?.email}
               </span>
             </div>

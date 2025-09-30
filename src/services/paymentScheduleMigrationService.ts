@@ -22,7 +22,7 @@ export const paymentScheduleMigrationService = {
    * @param defaultSetting - The default setting to use for existing schedules
    * @returns Promise with migration results
    */
-  async addPaymentDueDateSettingField(defaultSetting: 'first_day' | 'last_day' = 'first_day'): Promise<MigrationResult> {
+  async addPaymentDueDateSettingField(defaultSetting: 'first_day' | 'last_day' = 'last_day'): Promise<MigrationResult> {
     try {
       console.log(`Adding paymentDueDateSetting field to existing payment schedules with default: ${defaultSetting}...`);
       

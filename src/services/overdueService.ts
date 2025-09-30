@@ -39,7 +39,7 @@ export const overdueService = {
           // Only check pending payments
           if (payment.status === 'pending') {
             // Get the payment due date setting for this schedule
-            const paymentDueDateSetting = schedule.paymentDueDateSetting || 'first_day';
+            const paymentDueDateSetting = schedule.paymentDueDateSetting || 'last_day';
             
             // Parse the month key (e.g., "2025-09")
             const monthMatch = payment.month.match(/^(\d{4})-(\d{2})$/);

@@ -70,9 +70,12 @@ const RenterForm: React.FC<RenterFormProps> = ({ renter, onClose, onSuccess }) =
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Only first name is required
+    // Only first name and last name are required
     if (!formData.firstName.trim()) {
       newErrors.firstName = 'First name is required';
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
     }
     
     // Optional field validation (only if field has content)
@@ -103,7 +106,7 @@ const RenterForm: React.FC<RenterFormProps> = ({ renter, onClose, onSuccess }) =
           email: formData.email.trim(),
           phone: formData.phone.trim(),
           idNumber: formData.idNumber.trim(),
-          dateOfBirth: formData.dateOfBirth
+          dateOfBirth: formData.dateOfBirth ? Timestamp.fromDate(new Date(formData.dateOfBirth)) : null
         },
         emergencyContact: {
           name: formData.emergencyName.trim(),
@@ -182,6 +185,7 @@ const RenterForm: React.FC<RenterFormProps> = ({ renter, onClose, onSuccess }) =
                   value={formData.lastName}
                   onChange={(e) => handleInputChange('lastName', e.target.value)}
                   error={errors.lastName}
+                  required
                 />
                 <Input
                   label="Email"

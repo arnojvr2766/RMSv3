@@ -68,7 +68,7 @@ export interface Renter {
     firstName: string;
     lastName: string;
     idNumber: string;
-    dateOfBirth: Timestamp;
+    dateOfBirth: Timestamp | null;
     phone: string;
     email: string;
     emergencyContact: {
@@ -164,6 +164,15 @@ export interface PaymentSchedule {
     approvalNotes?: string;
     capturedBy?: string; // User who captured the payment
     capturedAt?: Timestamp; // When the payment was captured
+    // Proration details for partial month payments
+    prorationDetails?: {
+      isProrated: boolean;
+      daysOccupied: number;
+      daysInMonth: number;
+      dailyRate: number;
+      fullMonthAmount: number;
+      prorationType: 'first_month' | 'last_month';
+    };
   }[];
   // Aggregated penalty system
   aggregatedPenalty?: {
@@ -1201,11 +1210,14 @@ export const paymentScheduleService = {
   },
 };
 
+// Import proration utilities
+import { calculateProratedRent, checkProrationNeeded } from '../utils/prorationUtils';
+
 // Utility function to generate payment schedule
 export const generatePaymentSchedule = (
   leaseData: LeaseAgreement,
   includeDeposit: boolean = true,
-  paymentDueDate: 'first_day' | 'last_day' = 'first_day'
+  paymentDueDate: 'first_day' | 'last_day' = 'last_day'
 ): Omit<PaymentSchedule, 'id' | 'createdAt' | 'updatedAt'> => {
   // Convert Timestamp to Date for processing
   const startDate = leaseData.terms.startDate instanceof Timestamp 
@@ -1239,30 +1251,81 @@ export const generatePaymentSchedule = (
     totalAmount += leaseData.terms.depositAmount;
   }
 
-  // Generate monthly rent payments
+  // Check if proration is needed
+  const prorationCheck = checkProrationNeeded(startDate, endDate);
+  
+  // Generate monthly rent payments with proration
   const currentDate = new Date(startDate);
+  let monthCount = 0;
+  
   while (currentDate <= endDate) {
     const monthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    const isFirstMonth = monthCount === 0 && prorationCheck.firstMonthNeedsProration;
+    const isLastMonth = currentDate.getMonth() === endDate.getMonth() && 
+                       currentDate.getFullYear() === endDate.getFullYear() && 
+                       prorationCheck.lastMonthNeedsProration;
     
     // Calculate due date based on setting
-    const dueDate = calculatePaymentDueDate(
-      currentDate.getFullYear(),
-      currentDate.getMonth() + 1,
-      paymentDueDate
-    );
+    let dueDate: Date;
     
-    payments.push({
-      month: monthKey,
-      dueDate: Timestamp.fromDate(dueDate),
-      amount: leaseData.terms.monthlyRent,
-      type: 'rent' as const,
-      status: 'pending' as const,
-    });
+    if (isFirstMonth && prorationCheck.firstMonthNeedsProration) {
+      // For prorated first month, use the lease start date as the due date
+      // This ensures penalties are calculated from the actual lease start, not the 1st of the month
+      dueDate = new Date(startDate);
+    } else {
+      // For full months and non-prorated months, use the standard calculation
+      dueDate = calculatePaymentDueDate(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 1,
+        paymentDueDate
+      );
+    }
     
-    totalAmount += leaseData.terms.monthlyRent;
+    // Calculate prorated amount if needed
+    let paymentAmount = leaseData.terms.monthlyRent;
+    if (isFirstMonth || isLastMonth) {
+      const prorationResult = calculateProratedRent(
+        leaseData.terms.monthlyRent,
+        startDate,
+        endDate,
+        isFirstMonth,
+        isLastMonth
+      );
+      paymentAmount = prorationResult.proratedAmount;
+      
+      // Add proration details to the payment for reference
+      payments.push({
+        month: monthKey,
+        dueDate: Timestamp.fromDate(dueDate),
+        amount: paymentAmount,
+        type: 'rent' as const,
+        status: 'pending' as const,
+        // Add proration metadata
+        prorationDetails: {
+          isProrated: true,
+          daysOccupied: prorationResult.daysOccupied,
+          daysInMonth: prorationResult.daysInMonth,
+          dailyRate: prorationResult.dailyRate,
+          fullMonthAmount: leaseData.terms.monthlyRent,
+          prorationType: isFirstMonth ? 'first_month' : 'last_month'
+        }
+      });
+    } else {
+      // Full month payment
+      payments.push({
+        month: monthKey,
+        dueDate: Timestamp.fromDate(dueDate),
+        amount: paymentAmount,
+        type: 'rent' as const,
+        status: 'pending' as const,
+      });
+    }
+    
+    totalAmount += paymentAmount;
     
     // Move to next month
     currentDate.setMonth(currentDate.getMonth() + 1);
+    monthCount++;
   }
 
   // Calculate total paid amount (for deposits that are already paid)

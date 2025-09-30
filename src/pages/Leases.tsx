@@ -5,6 +5,7 @@ import { leaseService, facilityService, renterService, roomService } from '../se
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import LeaseView from '../components/forms/LeaseView';
+import LeaseTerminationForm from '../components/forms/LeaseTerminationForm';
 import PaymentCapture from '../components/forms/PaymentCapture';
 import { Timestamp } from 'firebase/firestore';
 
@@ -68,6 +69,7 @@ const Leases: React.FC = () => {
   const [selectedLease, setSelectedLease] = useState<LeaseAgreement | null>(null);
   const [showLeaseView, setShowLeaseView] = useState(false);
   const [showPaymentCapture, setShowPaymentCapture] = useState(false);
+  const [showLeaseTermination, setShowLeaseTermination] = useState(false);
   const [filterFacility, setFilterFacility] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -113,6 +115,11 @@ const Leases: React.FC = () => {
   const handleCapturePayment = (lease: LeaseAgreement) => {
     setSelectedLease(lease);
     setShowPaymentCapture(true);
+  };
+
+  const handleTerminateLease = () => {
+    setShowLeaseView(false);
+    setShowLeaseTermination(true);
   };
 
   const formatDate = (date: any) => {
@@ -486,6 +493,7 @@ const Leases: React.FC = () => {
                   setShowLeaseView(false);
                   setShowPaymentCapture(true);
                 }}
+                onTerminateLease={handleTerminateLease}
               />
             </div>
           </div>
@@ -511,6 +519,26 @@ const Leases: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Lease Termination Modal */}
+        {showLeaseTermination && selectedLease && (
+          <LeaseTerminationForm
+            leaseId={selectedLease.id!}
+            renterName={`${selectedLease.renter?.personalInfo?.firstName || ''} ${selectedLease.renter?.personalInfo?.lastName || ''}`}
+            roomNumber={selectedLease.room?.roomNumber || 'Unknown'}
+            facilityName={selectedLease.facility?.name || 'Unknown'}
+            onSuccess={() => {
+              setShowLeaseTermination(false);
+              setSelectedLease(null);
+              // Reload leases to update status
+              loadData();
+            }}
+            onCancel={() => {
+              setShowLeaseTermination(false);
+            }}
+          />
+        )}
+
       </div>
     </div>
   );
