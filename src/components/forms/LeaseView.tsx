@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, User, Building2, DoorClosed, X, CreditCard, AlertTriangle } from 'lucide-react';
+import { FileText, User, Building2, DoorClosed, X, CreditCard, AlertTriangle, ClipboardCheck, DollarSign } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { renterService, facilityService, roomService, paymentScheduleService } from '../../services/firebaseService';
+import { inspectionService } from '../../services/inspectionService';
+import InspectionForm from './InspectionForm';
+import DepositPayout from './DepositPayout';
 import { Timestamp } from 'firebase/firestore';
 
 // Temporary inline type definitions
@@ -91,6 +94,9 @@ const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment,
   const [room, setRoom] = useState<Room | null>(null);
   const [paymentSchedule, setPaymentSchedule] = useState<PaymentSchedule | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showInspectionForm, setShowInspectionForm] = useState(false);
+  const [showDepositPayout, setShowDepositPayout] = useState(false);
+  const [hasPostInspection, setHasPostInspection] = useState(false);
 
   useEffect(() => {
     const loadLeaseDetails = async () => {
@@ -98,12 +104,15 @@ const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment,
         setIsLoading(true);
         
         // Load all related data in parallel
-        const [renterData, facilityData, roomData, scheduleData] = await Promise.all([
+        const [renterData, facilityData, roomData, scheduleData, inspectionExists] = await Promise.all([
           renterService.getAllRenters().then(renters => renters.find(r => r.id === lease.renterId)),
           facilityService.getFacilities().then(facilities => facilities.find(f => f.id === lease.facilityId)),
           roomService.getAllRooms().then(rooms => rooms.find(r => r.id === lease.roomId)),
-          paymentScheduleService.getPaymentScheduleByLease(lease.id!)
+          paymentScheduleService.getPaymentScheduleByLease(lease.id!),
+          lease.id ? inspectionService.hasPostInspection(lease.id) : Promise.resolve(false)
         ]);
+        
+        setHasPostInspection(inspectionExists);
 
         setRenter(renterData || null);
         setFacility(facilityData || null);
@@ -383,13 +392,35 @@ const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment,
       )}
 
       {/* Actions */}
-      <div className="flex justify-end space-x-4">
+      <div className="flex flex-wrap justify-end gap-2">
         {onCapturePayment && (
           <Button variant="primary" onClick={onCapturePayment}>
             <CreditCard className="w-4 h-4 mr-2" />
             Payments
           </Button>
         )}
+        {lease.status === 'active' || lease.status === 'expired' ? (
+          <>
+            <Button 
+              variant="secondary" 
+              onClick={() => setShowInspectionForm(true)}
+            >
+              <ClipboardCheck className="w-4 h-4 mr-2" />
+              {hasPostInspection ? 'View Inspection' : 'Create Post-Inspection'}
+            </Button>
+            {lease.terms.depositPaid && (
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowDepositPayout(true)}
+                disabled={!hasPostInspection}
+                title={!hasPostInspection ? 'Post-inspection required before deposit refund' : ''}
+              >
+                <DollarSign className="w-4 h-4 mr-2" />
+                Request Deposit Refund
+              </Button>
+            )}
+          </>
+        ) : null}
         {onTerminateLease && lease.status === 'active' && (
           <Button variant="secondary" onClick={onTerminateLease}>
             <AlertTriangle className="w-4 h-4 mr-2" />
@@ -400,6 +431,33 @@ const LeaseView: React.FC<LeaseViewProps> = ({ lease, onClose, onCapturePayment,
           Close
         </Button>
       </div>
+
+      {/* Inspection Form Modal */}
+      {showInspectionForm && lease.id && facility && room && (
+        <InspectionForm
+          leaseId={lease.id}
+          facilityId={lease.facilityId}
+          roomId={lease.roomId}
+          renterId={lease.renterId}
+          inspectionType="post"
+          onSuccess={() => {
+            setShowInspectionForm(false);
+            setHasPostInspection(true);
+          }}
+          onCancel={() => setShowInspectionForm(false)}
+        />
+      )}
+
+      {/* Deposit Payout Modal */}
+      {showDepositPayout && (
+        <DepositPayout
+          lease={lease}
+          onSuccess={() => {
+            setShowDepositPayout(false);
+          }}
+          onCancel={() => setShowDepositPayout(false)}
+        />
+      )}
     </div>
   );
 };

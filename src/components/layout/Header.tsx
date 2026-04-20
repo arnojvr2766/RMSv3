@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, Settings, LogOut, Menu, Database, User, Wifi, WifiOff } from 'lucide-react';
+import { Settings, LogOut, Menu, Database, User, Wifi, WifiOff, Search, MessageSquarePlus } from 'lucide-react';
+import NotificationBell from '../notifications/NotificationBell';
 import Button from '../ui/Button';
 import { useRole } from '../../contexts/RoleContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import DataManagement from '../forms/DataManagement';
+import GlobalSearch from '../ui/GlobalSearch';
+import FeedbackModal from '../forms/FeedbackModal';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -16,6 +19,19 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { user, signOut } = useAuth();
   const { isOffline } = useSettings();
   const [showDataManagement, setShowDataManagement] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -52,7 +68,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                          RentDesk
                        </h1>
                        <p className="text-xs text-gray-400">
-                         Version 1.0.0
+                         Version 3.11.9
                        </p>
                      </div>
                    </Link>
@@ -75,8 +91,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
           {/* Action Buttons */}
           <div className="flex items-center space-x-1 sm:space-x-2">
             {isSystemAdmin && (
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => setShowDataManagement(true)}
                 title="Data Management"
@@ -84,9 +100,20 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
                 <Database className="w-4 h-4" />
               </Button>
             )}
-            <Button variant="ghost" size="sm" title="Notifications">
-              <Bell className="w-4 h-4" />
+            {isSystemAdmin && (
+              <button
+                onClick={() => setShowFeedback(true)}
+                title="Send Feedback / Report Bug"
+                className="relative flex items-center gap-1.5 px-2.5 py-1.5 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 hover:border-primary-500/60 text-primary-400 rounded-lg text-xs font-medium transition-all"
+              >
+                <MessageSquarePlus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Feedback</span>
+              </button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => setShowSearch(true)} title="Search (Ctrl+K)">
+              <Search className="w-4 h-4" />
             </Button>
+            <NotificationBell />
             
             {/* Connection Status - Hidden on mobile */}
             <div className="hidden sm:flex items-center space-x-1 px-2 py-1 bg-gray-700 rounded-full">
@@ -109,12 +136,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
               </Button>
             </Link>
             
-            {/* User Info - Simplified on mobile */}
-            <div className="flex items-center space-x-2 px-2 sm:px-3 py-1 bg-gray-700 rounded-full">
+            {/* User Info — links to profile page */}
+            <Link
+              to="/profile"
+              className="flex items-center space-x-2 px-2 sm:px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-full transition-colors"
+              title="My Profile"
+            >
               {user?.photoURL ? (
-                <img 
-                  src={user.photoURL} 
-                  alt="User Avatar" 
+                <img
+                  src={user.photoURL}
+                  alt="User Avatar"
                   className="w-5 h-5 sm:w-6 sm:h-6 rounded-full"
                 />
               ) : (
@@ -123,7 +154,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
               <span className="text-xs text-gray-300 max-w-20 sm:max-w-32 truncate hidden sm:block">
                 {user?.displayName || user?.email}
               </span>
-            </div>
+            </Link>
             
             <Button 
               variant="ghost" 
@@ -136,6 +167,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
           </div>
         </div>
       </div>
+
+      {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
 
       {/* Data Management Modal */}
       {showDataManagement && (

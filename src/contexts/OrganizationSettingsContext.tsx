@@ -13,6 +13,7 @@ interface OrganizationSettingsContextType {
   allowStandardUserPastPayments: boolean;
   requireAdminApprovalForPastPayments: boolean;
   maxPastPaymentDays: number;
+  allowPartialPayments: boolean;
   
   // User Permissions
   allowStandardUserFacilities: boolean;
@@ -26,12 +27,14 @@ interface OrganizationSettingsContextType {
   // Business Rules
   defaultLateFee: number;
   defaultChildSurcharge: number;
-  
+  autoLockAfterDays: number;
+
   // Setters
   setPaymentDueDate: (value: 'first_day' | 'last_day') => Promise<void>;
   setAllowStandardUserPastPayments: (value: boolean) => Promise<void>;
   setRequireAdminApprovalForPastPayments: (value: boolean) => Promise<void>;
   setMaxPastPaymentDays: (value: number) => Promise<void>;
+  setAllowPartialPayments: (value: boolean) => Promise<void>;
   setAllowStandardUserFacilities: (value: boolean) => Promise<void>;
   setAllowStandardUserRooms: (value: boolean) => Promise<void>;
   setAllowStandardUserLeases: (value: boolean) => Promise<void>;
@@ -41,6 +44,7 @@ interface OrganizationSettingsContextType {
   setAllowStandardUserPenalties: (value: boolean) => Promise<void>;
   setDefaultLateFee: (value: number) => Promise<void>;
   setDefaultChildSurcharge: (value: number) => Promise<void>;
+  setAutoLockAfterDays: (value: number) => Promise<void>;
 }
 
 const OrganizationSettingsContext = createContext<OrganizationSettingsContextType | undefined>(undefined);
@@ -111,6 +115,7 @@ export const OrganizationSettingsProvider: React.FC<OrganizationSettingsProvider
   const setAllowStandardUserPastPayments = (value: boolean) => updateSetting('allowStandardUserPastPayments', value);
   const setRequireAdminApprovalForPastPayments = (value: boolean) => updateSetting('requireAdminApprovalForPastPayments', value);
   const setMaxPastPaymentDays = (value: number) => updateSetting('maxPastPaymentDays', value);
+  const setAllowPartialPayments = (value: boolean) => updateSetting('allowPartialPayments', value);
   const setAllowStandardUserFacilities = (value: boolean) => updateSetting('allowStandardUserFacilities', value);
   const setAllowStandardUserRooms = (value: boolean) => updateSetting('allowStandardUserRooms', value);
   const setAllowStandardUserLeases = (value: boolean) => updateSetting('allowStandardUserLeases', value);
@@ -120,6 +125,7 @@ export const OrganizationSettingsProvider: React.FC<OrganizationSettingsProvider
   const setAllowStandardUserPenalties = (value: boolean) => updateSetting('allowStandardUserPenalties', value);
   const setDefaultLateFee = (value: number) => updateSetting('defaultLateFee', value);
   const setDefaultChildSurcharge = (value: number) => updateSetting('defaultChildSurcharge', value);
+  const setAutoLockAfterDays = (value: number) => updateSetting('autoLockAfterDays', value);
 
   const value: OrganizationSettingsContextType = {
     settings,
@@ -132,6 +138,7 @@ export const OrganizationSettingsProvider: React.FC<OrganizationSettingsProvider
     allowStandardUserPastPayments: settings.allowStandardUserPastPayments,
     requireAdminApprovalForPastPayments: settings.requireAdminApprovalForPastPayments,
     maxPastPaymentDays: settings.maxPastPaymentDays,
+    allowPartialPayments: settings.allowPartialPayments,
     
     // User Permissions
     allowStandardUserFacilities: settings.allowStandardUserFacilities,
@@ -145,12 +152,14 @@ export const OrganizationSettingsProvider: React.FC<OrganizationSettingsProvider
     // Business Rules
     defaultLateFee: settings.defaultLateFee,
     defaultChildSurcharge: settings.defaultChildSurcharge,
-    
+    autoLockAfterDays: settings.autoLockAfterDays ?? 5,
+
     // Setters
     setPaymentDueDate,
     setAllowStandardUserPastPayments,
     setRequireAdminApprovalForPastPayments,
     setMaxPastPaymentDays,
+    setAllowPartialPayments,
     setAllowStandardUserFacilities,
     setAllowStandardUserRooms,
     setAllowStandardUserLeases,
@@ -160,6 +169,7 @@ export const OrganizationSettingsProvider: React.FC<OrganizationSettingsProvider
     setAllowStandardUserPenalties,
     setDefaultLateFee,
     setDefaultChildSurcharge,
+    setAutoLockAfterDays,
   };
 
   return (

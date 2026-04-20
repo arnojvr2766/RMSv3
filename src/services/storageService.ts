@@ -191,24 +191,6 @@ class StorageService {
   }
 
   /**
-   * Upload lease document
-   */
-  async uploadLeaseDocument(
-    file: File, 
-    leaseId: string,
-    documentType: string
-  ): Promise<UploadResult> {
-    const fileName = `${documentType}_${Date.now()}_${file.name}`;
-    const path = `leases/${leaseId}/${fileName}`;
-    
-    return this.uploadFile(file, path, {
-      leaseId,
-      documentType,
-      uploadedAt: new Date().toISOString()
-    });
-  }
-
-  /**
    * Upload room image
    */
   async uploadRoomImage(
@@ -275,6 +257,24 @@ class StorageService {
     return this.uploadFile(file, path, {
       userId,
       type: 'profile_image',
+      uploadedAt: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Upload lease document (signed lease photo or ID document)
+   */
+  async uploadLeaseDocument(
+    file: File,
+    leaseId: string,
+    documentType: 'signed_lease' | 'id_document'
+  ): Promise<UploadResult> {
+    const fileName = `${documentType}_${Date.now()}_${file.name}`;
+    const path = `leases/${leaseId}/documents/${fileName}`;
+    
+    return this.uploadFile(file, path, {
+      leaseId,
+      documentType,
       uploadedAt: new Date().toISOString()
     });
   }

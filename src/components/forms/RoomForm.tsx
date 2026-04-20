@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
 import { roomService } from '../../services/firebaseService';
+import { useRole } from '../../contexts/RoleContext';
 
 // Temporary inline type definitions to isolate issues
 interface Facility {
@@ -45,7 +46,7 @@ interface Room {
     paymentMethods: string[];
     usesFacilityDefaults: boolean;
   };
-  status: 'available' | 'occupied' | 'maintenance' | 'unavailable';
+  status: 'available' | 'occupied' | 'maintenance' | 'unavailable' | 'locked' | 'empty';
   description?: string;
   floorLevel?: number;
   squareMeters?: number;
@@ -68,12 +69,13 @@ const RoomForm: React.FC<RoomFormProps> = ({
   room, 
   isEdit = false 
 }) => {
+  const { isSystemAdmin } = useRole();
   const [formData, setFormData] = useState({
     roomNumber: room?.roomNumber || '',
     type: room?.type || 'single' as const,
     capacity: room?.capacity || 1,
-    monthlyRent: room?.monthlyRent || 0,
-    depositAmount: room?.depositAmount || 0,
+    monthlyRent: room?.monthlyRent || (facility as any).defaultBusinessRules?.defaultMonthlyRent || 0,
+    depositAmount: room?.depositAmount || (facility as any).defaultBusinessRules?.defaultDepositAmount || 0,
     description: room?.description || '',
     floorLevel: room?.floorLevel || 1,
     squareMeters: room?.squareMeters || 0,
@@ -221,6 +223,8 @@ const RoomForm: React.FC<RoomFormProps> = ({
     { value: 'occupied', label: 'Occupied' },
     { value: 'maintenance', label: 'Under Maintenance' },
     { value: 'unavailable', label: 'Unavailable' },
+    { value: 'locked', label: 'Locked' },
+    { value: 'empty', label: 'Empty' },
   ];
 
   return (
@@ -292,26 +296,52 @@ const RoomForm: React.FC<RoomFormProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Monthly Rent (R)"
-                  type="number"
-                  value={formData.monthlyRent}
-                  onChange={(e) => handleInputChange('monthlyRent', parseFloat(e.target.value) || 0)}
-                  error={errors.monthlyRent}
-                  required
-                  min="0"
-                  placeholder="0.00"
-                />
+                {isSystemAdmin ? (
+                  <>
+                    <Input
+                      label="Monthly Rent (R)"
+                      type="number"
+                      value={formData.monthlyRent}
+                      onChange={(e) => handleInputChange('monthlyRent', parseFloat(e.target.value) || 0)}
+                      error={errors.monthlyRent}
+                      required
+                      min="0"
+                      placeholder="0.00"
+                    />
 
-                <Input
-                  label="Deposit Amount (R)"
-                  type="number"
-                  value={formData.depositAmount}
-                  onChange={(e) => handleInputChange('depositAmount', parseFloat(e.target.value) || 0)}
-                  error={errors.depositAmount}
-                  min="0"
-                  placeholder="0.00"
-                />
+                    <Input
+                      label="Deposit Amount (R)"
+                      type="number"
+                      value={formData.depositAmount}
+                      onChange={(e) => handleInputChange('depositAmount', parseFloat(e.target.value) || 0)}
+                      error={errors.depositAmount}
+                      min="0"
+                      placeholder="0.00"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Monthly Rent (R)
+                      </label>
+                      <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-400">
+                        R{formData.monthlyRent.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Only system admin can edit</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Deposit Amount (R)
+                      </label>
+                      <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-400">
+                        R{formData.depositAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Only system admin can edit</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -427,41 +457,87 @@ const RoomForm: React.FC<RoomFormProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Late Fee Amount (R)"
-                    type="number"
-                    value={formData.lateFeeAmount}
-                    onChange={(e) => handleInputChange('lateFeeAmount', parseFloat(e.target.value) || 0)}
-                    error={errors.lateFeeAmount}
-                    min="0"
-                  />
+                  {isSystemAdmin ? (
+                    <>
+                      <Input
+                        label="Late Fee Amount (R)"
+                        type="number"
+                        value={formData.lateFeeAmount}
+                        onChange={(e) => handleInputChange('lateFeeAmount', parseFloat(e.target.value) || 0)}
+                        error={errors.lateFeeAmount}
+                        min="0"
+                      />
 
-                  <Input
-                    label="Late Fee Start Day"
-                    type="number"
-                    value={formData.lateFeeStartDay}
-                    onChange={(e) => handleInputChange('lateFeeStartDay', parseInt(e.target.value) || 1)}
-                    error={errors.lateFeeStartDay}
-                    min="1"
-                  />
+                      <Input
+                        label="Late Fee Start Day"
+                        type="number"
+                        value={formData.lateFeeStartDay}
+                        onChange={(e) => handleInputChange('lateFeeStartDay', parseInt(e.target.value) || 1)}
+                        error={errors.lateFeeStartDay}
+                        min="1"
+                      />
 
-                  <Input
-                    label="Child Surcharge (R)"
-                    type="number"
-                    value={formData.childSurcharge}
-                    onChange={(e) => handleInputChange('childSurcharge', parseFloat(e.target.value) || 0)}
-                    error={errors.childSurcharge}
-                    min="0"
-                  />
+                      <Input
+                        label="Child Surcharge (R)"
+                        type="number"
+                        value={formData.childSurcharge}
+                        onChange={(e) => handleInputChange('childSurcharge', parseFloat(e.target.value) || 0)}
+                        error={errors.childSurcharge}
+                        min="0"
+                      />
 
-                  <Input
-                    label="Grace Period (Days)"
-                    type="number"
-                    value={formData.gracePeriodDays}
-                    onChange={(e) => handleInputChange('gracePeriodDays', parseInt(e.target.value) || 0)}
-                    error={errors.gracePeriodDays}
-                    min="0"
-                  />
+                      <Input
+                        label="Grace Period (Days)"
+                        type="number"
+                        value={formData.gracePeriodDays}
+                        onChange={(e) => handleInputChange('gracePeriodDays', parseInt(e.target.value) || 0)}
+                        error={errors.gracePeriodDays}
+                        min="0"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Late Fee Amount (R)
+                        </label>
+                        <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-400">
+                          R{formData.lateFeeAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Only system admin can edit</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Late Fee Start Day
+                        </label>
+                        <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-400">
+                          {formData.lateFeeStartDay}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Only system admin can edit</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Child Surcharge (R)
+                        </label>
+                        <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-400">
+                          R{formData.childSurcharge.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Only system admin can edit</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Grace Period (Days)
+                        </label>
+                        <div className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-gray-400">
+                          {formData.gracePeriodDays}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Only system admin can edit</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

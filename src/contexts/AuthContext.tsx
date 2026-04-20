@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState, type ReactNode }
 import { onAuthStateChanged, signOut as firebaseSignOut, type User } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { UserService } from '../services/userService';
+import { leaseReminderService } from '../services/leaseReminderService';
+import { roomAutoLockService } from '../services/roomAutoLockService';
 
 interface AuthContextType {
   user: User | null;
@@ -24,14 +26,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(user);
       setLoading(false);
       
-      // Track login activity when user signs in
+      // Track login activity and run daily checks when user signs in
       if (user) {
         try {
           await UserService.updateLastLogin(user.uid);
         } catch (error) {
           console.error('Error updating last login:', error);
-          // Don't throw error as this shouldn't prevent login
         }
+
+        // Run daily checks in background — won't block login
+        // Check for lease expiry reminders
+        leaseReminderService.getLeasesNeedingReminders().then(leases => {
+          return Promise.all(leases.map(lease =>
+            leaseReminderService.createReminderNotifications(lease)
+          ));
+        }).catch(err => console.error('Error running lease reminder check:', err));
+
+        // Auto-lock overdue rooms
+        roomAutoLockService.checkAndLockOverdueRooms()
+          .catch(err => console.error('Error running room auto-lock check:', err));
       }
     });
 

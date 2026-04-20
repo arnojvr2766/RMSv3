@@ -43,32 +43,42 @@ export interface AggregatedPenalty {
 // Aggregated Penalty Service
 export const aggregatedPenaltyService = {
   // Calculate penalty for a specific payment
+  // Penalty is auto-applied based on payment date vs cutoff date (lateFeeStartDay of the month)
   calculatePenalty(
     dueDate: Date,
     paidDate: Date,
     businessRules: {
       lateFeeAmount: number;
-      lateFeeStartDay: number;
+      lateFeeStartDay: number; // Cutoff day of the month (e.g., 4th)
       gracePeriodDays: number;
     },
     baseAmount: number
   ): PenaltyCalculation {
-    const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
     const paidDateOnly = new Date(paidDate.getFullYear(), paidDate.getMonth(), paidDate.getDate());
+    
+    // Get cutoff date: lateFeeStartDay of the payment month
+    const cutoffDate = new Date(
+      paidDateOnly.getFullYear(),
+      paidDateOnly.getMonth(),
+      businessRules.lateFeeStartDay
+    );
 
-    // Calculate days late
-    const daysLate = Math.floor((paidDateOnly.getTime() - dueDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+    // Calculate days late from cutoff date
+    const daysLate = Math.max(0, Math.floor((paidDateOnly.getTime() - cutoffDate.getTime()) / (1000 * 60 * 60 * 24)));
     
-    // Check if grace period applies
-    const gracePeriodUsed = daysLate <= businessRules.gracePeriodDays;
+    // Check if grace period applies (from due date)
+    const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const daysFromDueDate = Math.floor((paidDateOnly.getTime() - dueDateOnly.getTime()) / (1000 * 60 * 60 * 24));
+    const gracePeriodUsed = daysFromDueDate <= businessRules.gracePeriodDays;
     
-    // Determine if penalty should be applied
-    const isLate = daysLate > businessRules.lateFeeStartDay && !gracePeriodUsed;
+    // Determine if penalty should be applied (payment date > cutoff date)
+    const isLate = paidDateOnly > cutoffDate && daysLate > 0;
     
+    // Calculate penalty: (paymentDate.day - lateFeeStartDay) × lateFeeAmount
+    // Example: Payment on 10th, cutoff 4th → (10 - 4) × R20 = R120
     let penaltyAmount = 0;
-    if (isLate) {
-      const daysOverdue = daysLate - businessRules.lateFeeStartDay;
-      penaltyAmount = daysOverdue * businessRules.lateFeeAmount;
+    if (isLate && !gracePeriodUsed) {
+      penaltyAmount = daysLate * businessRules.lateFeeAmount;
     }
 
     return {
@@ -79,7 +89,7 @@ export const aggregatedPenaltyService = {
       calculation: {
         baseAmount,
         penaltyRate: businessRules.lateFeeAmount,
-        daysOverdue: Math.max(0, daysLate - businessRules.lateFeeStartDay),
+        daysOverdue: daysLate,
         calculatedAmount: penaltyAmount,
       },
     };

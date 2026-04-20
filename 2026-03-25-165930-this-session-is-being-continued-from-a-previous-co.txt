@@ -1,0 +1,615 @@
+╭─── Claude Code v2.1.76 ──────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                 Welcome back Arno!                 │ started                 │
+│                                                    │ Run /init to create a … │
+│                      ▗ ▗   ▖ ▖                     │ ─────────────────────── │
+│                                                    │ Recent activity         │
+│                        ▘▘ ▝▝                       │ No recent activity      │
+│   Sonnet 4.6 · Claude Pro · arnoj17@gmail.com's    │                         │
+│   Organization                                     │                         │
+│        ~/Documents/Personal/RentDesk/RMSv3         │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read src/components/ui/SkeletonLoader.tsx (118 lines)
+  ⎿  Read src/App.tsx (138 lines)
+  ⎿  Referenced file src/pages/Complaints.tsx
+  ⎿  Referenced file src/pages/Rooms.tsx
+  ⎿  Referenced file src/pages/Leases.tsx
+
+⏺ Read 2 files (ctrl+o to expand)
+
+⏺ Dashboard looks clean (no debug console.logs). Now let me check PaymentCapture
+   and dashboardService.
+
+⏺ Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Now let me read PaymentCapture around line 298 and fix all three issues in
+  parallel.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now I'll fix all three issues. Starting with PaymentCapture (need to add
+  useAuth import and use user?.uid):
+
+⏺ Update(src/components/forms/PaymentCapture.tsx)
+  ⎿  Added 1 line
+      13  import { usePaymentValidation, validateOnePaymentPerMonth, vali
+          dateDepositBeforeRent, validateOutstandingRent } from '../../ut
+          ils/paymentValidation';
+      14  import { useOrganizationSettings } from '../../contexts/Organiz
+          ationSettingsContext';
+      15  import { useToast } from '../../contexts/ToastContext';
+      16 +import { useAuth } from '../../contexts/AuthContext';          
+      17  
+      18  // Temporary inline type definitions
+      19  // PaymentSchedule type is imported from firebaseService
+
+⏺ Now find where useToast is destructured in PaymentCapture to add useAuth
+  alongside it:
+
+⏺ Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Update(src/components/forms/PaymentCapture.tsx)
+  ⎿  Added 1 line
+      53    const { validatePayment } = usePaymentValidation();
+      54    const { allowPartialPayments } = useOrganizationSettings();
+      55    const { showSuccess, showError } = useToast();
+      56 +  const { user } = useAuth();                                  
+      57    const [paymentSchedule, setPaymentSchedule] = useState<Paymen
+          tSchedule | null>(null);
+      58    const [selectedPayment, setSelectedPayment] = useState<string
+          >('');
+      59    const [paymentAmount, setPaymentAmount] = useState<number>(0)
+          ;
+
+⏺ Update(src/components/forms/PaymentCapture.tsx)
+  ⎿  Added 1 line, removed 1 line
+      297          paidAmount: paymentAmount,
+      298          paymentMethod: paymentMethod,
+      299          requiresApproval: paymentValidation?.requiresApproval 
+           || false,
+      300 -        capturedBy: 'current_user_id', // TODO: Get from auth 
+          -context                                                       
+      300 +        capturedBy: user?.uid || '',                          
+      301          capturedAt: Timestamp.now(),
+      302        };
+      303  
+
+⏺ Now fix Notifications.tsx alert() calls — replace with useToast:
+
+⏺ Update(src/pages/Notifications.tsx)
+  ⎿  Added 1 line
+      3  import { useAuth } from '../contexts/AuthContext';
+      4  import { notificationService, type Notification } from '../servi
+         ces/notificationService';
+      5  import { useNavigate } from 'react-router-dom';
+      6 +import { useToast } from '../contexts/ToastContext';            
+      7  import Button from '../components/ui/Button';
+      8  import Card from '../components/ui/Card';
+      9  
+
+⏺ Update(src/pages/Notifications.tsx)
+  ⎿  Added 1 line
+      10  const Notifications: React.FC = () => {
+      11    const { user } = useAuth();
+      12    const navigate = useNavigate();
+      13 +  const { showError } = useToast();                            
+      14    const [notifications, setNotifications] = useState<Notificati
+          on[]>([]);
+      15    const [isLoading, setIsLoading] = useState(true);
+      16    const [filter, setFilter] = useState<'all' | 'unread' | 'leas
+          e_expiry' | 'payment_overdue'>('all');
+
+⏺ Update(src/pages/Notifications.tsx)
+  ⎿  Added 3 lines, removed 3 lines
+      57        await notificationService.markAsRead(notificationId);
+      58      } catch (error) {
+      59        console.error('Error marking notification as read:', erro
+          r);
+      60 -      alert('Failed to mark notification as read.');           
+      60 +      showError('Failed to mark notification as read.');       
+      61      }
+      62    };
+      63  
+     ...
+      67        await notificationService.markAllAsRead(user.uid);
+      68      } catch (error) {
+      69        console.error('Error marking all as read:', error);
+      70 -      alert('Failed to mark all notifications as read.');      
+      70 +      showError('Failed to mark all notifications as read.');  
+      71      }
+      72    };
+      73  
+     ...
+      76        await notificationService.deleteNotification(notification
+          Id);
+      77      } catch (error) {
+      78        console.error('Error deleting notification:', error);
+      79 -      alert('Failed to delete notification.');                 
+      79 +      showError('Failed to delete notification.');             
+      80      }
+      81    };
+      82  
+
+⏺ Now fix getRecentPayments() in dashboardService to query real Firestore data:
+
+⏺ Update(src/services/dashboardService.ts)
+  ⎿  Added 75 lines, removed 20 lines
+      320    }
+      321  
+      322    private async getRecentPayments() {
+      323 -    // Mock recent payments data                              
+      324 -    return [                                                  
+      325 -      { id: '1', room: 'Y014', tenant: 'Bongani Mthembu', amou
+          -nt: 1782, status: 'paid', date: '2025-01-15', method: 'bank_tr
+          -ansfer' },                                                    
+      326 -      { id: '2', room: 'R005', tenant: 'Nomsa Dlamini', amount
+          -: 1736, status: 'paid', date: '2025-01-14', method: 'eft' },  
+      327 -      { id: '3', room: 'Y006', tenant: 'Thandeka Mthembu', amo
+          -unt: 1396, status: 'pending', date: '2025-01-13', method: 'cas
+          -h' },                                                         
+      328 -      { id: '4', room: 'R007', tenant: 'Mandla Ngcobo', amount
+          -: 910, status: 'overdue', date: '2025-01-12', method: 'bank_tr
+          -ansfer' }                                                     
+      329 -    ];                                                        
+      323 +    try {                                                     
+      324 +      const schedulesRef = collection(db, 'payment_schedules')
+          +;                                                             
+      325 +      const snapshot = await getDocs(schedulesRef);           
+      326 +                                                              
+      327 +      const payments: any[] = [];                             
+      328 +      snapshot.docs.forEach(doc => {                          
+      329 +        const data = doc.data();                              
+      330 +        if (data.payments && Array.isArray(data.payments)) {  
+      331 +          data.payments.forEach((p: any) => {                 
+      332 +            if (p.paidDate || p.status === 'paid' || p.status 
+          +=== 'partial') {                                              
+      333 +              payments.push({                                 
+      334 +                id: `${doc.id}-${p.month}`,                   
+      335 +                room: data.roomNumber || data.roomId || '—',  
+      336 +                tenant: data.renterName || data.renterId || '—
+          +',                                                            
+      337 +                amount: p.paidAmount || p.amount || 0,        
+      338 +                status: p.status,                             
+      339 +                date: p.paidDate?.toDate?.().toISOString().spl
+          +it('T')[0] || '',                                             
+      340 +                method: p.paymentMethod || '',                
+      341 +              });                                             
+      342 +            }                                                 
+      343 +          });                                                 
+      344 +        }                                                     
+      345 +      });                                                     
+      346 +                                                              
+      347 +      // Sort by date descending and return most recent 10    
+      348 +      return payments                                         
+      349 +        .sort((a, b) => (b.date || '').localeCompare(a.date ||
+          + ''))                                                         
+      350 +        .slice(0, 10);                                        
+      351 +    } catch {                                                 
+      352 +      return [];                                              
+      353 +    }                                                         
+      354    }
+      355  
+      356    private async getRecentLeases() {
+      333 -    // Mock recent leases data                                
+      334 -    return [                                                  
+      335 -      { id: '1', room: 'Y017', tenant: 'Mxolisi Nkosi', startD
+          -ate: '2025-01-15', rent: 1080, status: 'active' },            
+      336 -      { id: '2', room: 'R013', tenant: 'Thulani Mthembu', star
+          -tDate: '2025-01-14', rent: 1665, status: 'active' },          
+      337 -      { id: '3', room: 'Y011', tenant: 'Nomvula Dlamini', star
+          -tDate: '2025-01-13', rent: 1016, status: 'pending' }          
+      338 -    ];                                                        
+      357 +    try {                                                     
+      358 +      const leasesRef = collection(db, 'leases');             
+      359 +      const q = query(leasesRef, orderBy('createdAt', 'desc'),
+          + limit(5));                                                   
+      360 +      const snapshot = await getDocs(q);                      
+      361 +      return snapshot.docs.map(doc => {                       
+      362 +        const data = doc.data();                              
+      363 +        return {                                              
+      364 +          id: doc.id,                                         
+      365 +          room: data.roomId || '—',                           
+      366 +          tenant: data.renterId || '—',                       
+      367 +          startDate: data.terms?.startDate?.toDate?.().toISOSt
+          +ring().split('T')[0] || '',                                   
+      368 +          rent: data.terms?.monthlyRent || 0,                 
+      369 +          status: data.status || 'active',                    
+      370 +        };                                                    
+      371 +      });                                                     
+      372 +    } catch {                                                 
+      373 +      return [];                                              
+      374 +    }                                                         
+      375    }
+      376  
+      377    private async getRecentActivities() {
+      342 -    // Mock recent activities data                            
+      343 -    return [                                                  
+      344 -      { id: '1', type: 'payment', message: 'Payment received f
+          -rom Room Y014', time: '2 hours ago', amount: 1782 },          
+      345 -      { id: '2', type: 'lease', message: 'New lease signed for
+          - Room Y017', time: '4 hours ago', tenant: 'Mxolisi Nkosi' },  
+      346 -      { id: '3', type: 'maintenance', message: 'Maintenance re
+          -quest for Room R005', time: '6 hours ago', priority: 'medium' 
+          -},                                                            
+      347 -      { id: '4', type: 'overdue', message: 'Overdue payment al
+          -ert for Room R007', time: '8 hours ago', amount: 910 }        
+      348 -    ];                                                        
+      378 +    // Build a combined activity feed from real data          
+      379 +    try {                                                     
+      380 +      const [payments, leases] = await Promise.all([          
+      381 +        this.getRecentPayments(),                             
+      382 +        this.getRecentLeases(),                               
+      383 +      ]);                                                     
+      384 +                                                              
+      385 +      const activities: any[] = [                             
+      386 +        ...payments.slice(0, 3).map(p => ({                   
+      387 +          id: p.id,                                           
+      388 +          type: 'payment',                                    
+      389 +          message: `Payment of R${p.amount?.toLocaleString()} 
+          +for Room ${p.room}`,                                          
+      390 +          time: p.date || '',                                 
+      391 +        })),                                                  
+      392 +        ...leases.slice(0, 2).map(l => ({                     
+      393 +          id: l.id,                                           
+      394 +          type: 'lease',                                      
+      395 +          message: `Lease for Room ${l.room} — R${l.rent?.toLo
+          +caleString()}/mo`,                                            
+      396 +          time: l.startDate || '',                            
+      397 +        })),                                                  
+      398 +      ];                                                      
+      399 +                                                              
+      400 +      return activities.sort((a, b) => (b.time || '').localeCo
+          +mpare(a.time || '')).slice(0, 5);                             
+      401 +    } catch {                                                 
+      402 +      return [];                                              
+      403 +    }                                                         
+      404    }
+      405  }
+      406  
+
+⏺ Now let me verify the agent results for global search, WhatsApp, rent
+  increase, and PDF export:
+
+⏺ Searched for 2 patterns (ctrl+o to expand)
+
+⏺ Both agent files exist. Let me quickly verify key parts of each and also check
+   the Header and Reports for the additions:
+
+⏺ Searched for 1 pattern (ctrl+o to expand)
+
+⏺ All features are in place. Let me do a final check for any remaining alert()
+  calls:
+
+⏺ Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Good — Notifications.tsx alert() calls are fixed. The remaining alert() calls
+  are across many other files and weren't part of the original "all of it" list.
+   Let me verify the dashboardService imports are sufficient for the new real
+  queries:
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ All imports are already present. Here's a summary of everything completed this
+   session:
+
+  Done now:
+  - capturedBy: 'current_user_id' → user?.uid || '' in PaymentCapture.tsx (added
+   useAuth import)
+  - alert() → showError() toast in Notifications.tsx (3 calls — mark as read,
+  mark all, delete)
+  - getRecentPayments() / getRecentLeases() / getRecentActivities() in
+  dashboardService now query real Firestore instead of returning hardcoded mock
+  arrays
+
+  Completed by agents earlier:
+  - GlobalSearch.tsx modal with Ctrl+K shortcut + Header integration
+  - WhatsApp wa.me links on Renters page
+  - RentIncreaseForm.tsx + Leases page integration
+  - PDF export via window.print() in Reports
+
+  All pending items from the "all of it" list are now complete.
+
+✻ Brewed for 5m 49s
+
+⏺ Agent "Global search + WhatsApp links" completed
+
+⏺ Agent "Rent increase workflow + PDF export" completed
+
+⏺ Both agents completed successfully with zero TypeScript errors. Everything
+  from the full list is now done:
+
+  ┌──────────────────────────────────────────────────────────┬────────┐
+  │                         Feature                          │ Status │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Late fee preview banner in PaymentCapture                │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Photo uploads per maintenance sub-category in Complaints │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Duplicate payment guard (inline warning, not alert)      │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Toast notification system                                │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Real dashboard data (StatCards, Recent Payments)         │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Sidebar live badge counts + auto-close on mobile         │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Mobile bottom nav + auto-route on login                  │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Payment receipt modal after capture                      │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Bar charts in Reports (recharts)                         │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Lease termination bug fix                                │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Delete confirmation dialog in Rooms                      │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Global search modal (Ctrl+K)                             │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ WhatsApp links on Renters page                           │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Rent increase workflow in Leases                         │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ PDF export in Reports (window.print())                   │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ capturedBy placeholder → real user.uid                   │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ alert() in Notifications → toast                         │ ✅     │
+  ├──────────────────────────────────────────────────────────┼────────┤
+  │ Dashboard recent payments from real Firestore            │ ✅     │
+  └──────────────────────────────────────────────────────────┴────────┘
+
+❯ What would be my step by step on how I can test this tool end to end to make  
+sure everything is working and that there is a good UX                          
+
+⏺ Here's a practical end-to-end test plan, organized by flow. Work through these
+   in order — each section builds on the previous.
+
+  ---
+  Setup
+
+  1. Run the dev server: npm run dev
+  2. Have two browser windows ready — one for a system_admin user, one for a
+  standard_user
+  3. Keep the browser console open throughout (F12) — watch for errors
+
+  ---
+  1. Auth & Routing
+
+  Desktop (> 768px):
+  - Log in → should land on /dashboard
+  - Log out → should return to /
+  - Visit a protected route while logged out → should redirect to /
+
+  Mobile (resize to < 768px or DevTools mobile):
+  - Log in → should land on /mobile/dashboard
+  - Bottom nav should be visible (Home, Payments, Renters, Leases, Issues)
+  - Tapping each bottom nav item navigates correctly
+  - Sidebar should NOT be visible on mobile (it's the hamburger menu instead)
+
+  Role gates:
+  - Log in as standard_user → /settings and /reports should redirect away
+  - Log in as system_admin → sees System Admin dashboard instead of regular
+  Dashboard
+
+  ---
+  2. Dashboard
+
+  - Stats cards show real numbers (not zeros, not obviously fake data like
+  "45,230")
+  - Occupancy Rate shows "X / Y rooms" subtitle
+  - Overdue Payments turns red if > 0
+  - Recent Payments list shows real payments (not mock names like "Bongani
+  Mthembu")
+  - Portfolio Summary row: Facilities / Total Rooms / Available Rooms /
+  Collection Rate
+  - Refresh button spins and reloads data
+  - Quick Action buttons navigate to the right pages
+
+  ---
+  3. Global Search (Ctrl+K)
+
+  - Press Ctrl+K (or Cmd+K on Mac) → search modal opens
+  - Type a renter's name → results appear with type badges (Renter / Room /
+  Lease)
+  - Click a result → navigates to that page and modal closes
+  - Press Escape → modal closes
+  - Click backdrop → modal closes
+  - Search icon in Header also opens the modal
+
+  ---
+  4. Facilities
+
+  - Create a facility (name, address, type)
+  - It appears in the list
+
+  ---
+  5. Rooms
+
+  - Create a room (attach to a facility, set rent, status = available)
+  - Room appears in list with correct status badge
+  - Click the delete button → confirmation dialog appears (not window.confirm)
+  - Cancel → room remains; Confirm → room is deleted
+
+  ---
+  6. Renters
+
+  - Create a renter with a phone number starting with 0 (e.g. 0821234567)
+  - View the renter → a WhatsApp icon/link should appear next to the phone
+  number
+  - Click it → opens https://wa.me/27821234567 in a new tab
+  - Same link should appear in both card view and table view
+
+  ---
+  7. Leases
+
+  Create:
+  - Create a lease linking a renter to a room
+  - Lease appears in list as Active
+
+  Rent Increase:
+  - Find an active lease → click "Update Rent" (TrendingUp icon)
+  - Modal shows current rent vs. new rent with live % calculation
+  - Enter > 15% increase → warning banner appears
+  - Submit → confirm the terms.monthlyRent updated in Firestore
+
+  Termination:
+  - Find an active lease → click Terminate
+  - Termination form shows renter name, room number, facility name (not
+  blank/undefined)
+  - Submit termination → lease status updates
+
+  ---
+  8. Payments
+
+  Late fee preview:
+  - Open PaymentCapture for an overdue payment
+  - An orange banner should show: "X days late · Late fee: R Y · Total due: R Z"
+   before you submit
+
+  Duplicate guard:
+  - Try to record a second payment for the same renter in the same month
+  - A yellow inline warning should appear (not a browser alert())
+  - Submit is blocked until you tick "I understand" checkbox
+  - Tick checkbox → submit becomes available
+
+  Receipt modal:
+  - Submit a valid payment → a receipt modal appears with receipt number,
+  amount, method, date
+  - Print button triggers window.print()
+  - Close → navigates away normally
+
+  capturedBy field:
+  - After submitting a payment, check the Firestore document for that payment
+  month
+  - capturedBy should be your actual Firebase UID (not the string
+  "current_user_id")
+
+  ---
+  9. Complaints (Maintenance)
+
+  - Create a complaint with Category = Maintenance
+  - A sub-category dropdown appears (Plumbing, Electrical, Staff, Paint,
+  Windows/Doors, Other)
+  - Select a sub-category, attach a photo (Upload or camera)
+  - Submit → complaint appears in list with sub-category shown
+  - Open the complaint detail → photo renders, sub-category badge visible
+
+  ---
+  10. Reports
+
+  - Navigate to /reports
+  - Two charts should render: "12-Month Revenue Overview" (bar) and "Facility
+  Performance" (horizontal bar)
+  - Click the PDF button → print dialog opens, charts are visible in print
+  preview
+  - Sidebar and nav should be hidden in print preview (check @media print CSS)
+
+  ---
+  11. Notifications
+
+  - Navigate to /notifications
+  - Click the ✓ (mark as read) on a notification → no browser alert(), it just
+  marks as read silently
+  - Click the trash icon → no browser alert(), notification is deleted
+  - Click "Mark all as read" → same, no alert()
+  - If any of the above fail → a toast should appear bottom-right (not an alert)
+
+  ---
+  12. Toast Notifications
+
+  While testing the above, confirm:
+  - Success actions (payment captured, lease created, etc.) show a green toast
+  bottom-right
+  - Error conditions show a red toast
+  - Toasts auto-dismiss after ~4 seconds
+  - Toasts can be manually dismissed by clicking ✕
+
+  ---
+  13. Sidebar Badges
+
+  - Sidebar shows a red badge count on:
+    - Payments (overdue count)
+    - Payment Approvals (pending approvals)
+    - Notifications (unread count)
+    - Complaints (open complaints)
+  - Badges update when you navigate between pages
+  - On mobile, sidebar closes automatically when you tap a nav item
+
+  ---
+  Common Things to Watch For
+
+  ┌─────────────────────────┬───────────────────────────────────────────────┐
+  │         Signal          │                 What to check                 │
+  ├─────────────────────────┼───────────────────────────────────────────────┤
+  │ Console errors          │ Open F12, watch for red errors on every page  │
+  │                         │ load                                          │
+  ├─────────────────────────┼───────────────────────────────────────────────┤
+  │ undefined / NaN in UI   │ Data mapping issue — check field names        │
+  ├─────────────────────────┼───────────────────────────────────────────────┤
+  │ Blank modals            │ Component receiving wrong prop (e.g.          │
+  │                         │ terminated lease form)                        │
+  ├─────────────────────────┼───────────────────────────────────────────────┤
+  │ Page stuck on spinner   │ Firestore query failing — check console for   │
+  │                         │ permission denied                             │
+  ├─────────────────────────┼───────────────────────────────────────────────┤
+  │ Tailwind classes not    │ Dynamic class names — check for purged styles │
+  │ applying                │                                               │
+  └─────────────────────────┴───────────────────────────────────────────────┘
+
+  ---
+  Tip: Go through this once as a standard_user and once as a system_admin —
+  several UI elements are role-gated and will only appear for the right role.
+
+✻ Baked for 46s
+
+❯ Can you create a comprehensive md document for me.  so I can use that as a    
+checklist to test and what to test. - [ ]                                       
+
+⏺ Write(TESTING_CHECKLIST.md)
+  ⎿  Wrote 448 lines to TESTING_CHECKLIST.md
+      1 # RentDesk RMS v3 — End-to-End Testing Checklist
+      2 
+      3 > **How to use:** Work through each section in order. Tick each c
+        heckbox as you confirm it works. Note any failures with a short c
+        omment next to the item.
+      4 >
+      5 > **Before you start:**
+      6 > - Run `npm run dev` and open the app in your browser
+      7 > - Open browser DevTools (`F12`) and keep the Console tab visibl
+        e throughout
+      8 > - Have credentials for both a `system_admin` and a `standard_us
+        er` account ready
+      9 > - Test on desktop (> 1024px) and mobile (< 768px — use DevTools
+         device emulator)
+     … +438 lines (ctrl+o to expand)
+
+⏺ Created at TESTING_CHECKLIST.md in the project root. Here's what's in it:
+
+  18 sections covering:
+  1. Auth & Role-Based Access
+  2. Navigation & Layout (desktop + mobile)
+  3. Global Search (Ctrl+K)
+  4. Toast Notifications (verifying no alert() anywhere)
+  5. Dashboard (real data, stat cards, quick actions)
+  6. Facilities
+  7. Rooms (delete confirmation dialog)
+  8. Renters (WhatsApp links, number normalisation)
+  9. Leases (rent increase workflow, termination)
+  10. Payments (late fee preview, duplicate guard, receipt modal, capturedBy UID
+   check)
+  11. Complaints (photo upload, maintenance sub-category)
+  12. Notifications (no alert() on mark/delete)
+  13. Reports (charts, PDF export, print preview)
+  14. Maintenance & Penalties
+  15. Settings
+  16. Mobile Pages (all 6 routes)
+  17. Cross-Cutting Concerns (console errors, empty states, responsive layout,
+  Firestore integrity)
+  18. Regression Check (quick smoke tests for bugs that were previously fixed)
+
+  Sign-off table at the bottom for tracking who tested what and when.
+
+✻ Brewed for 1m 41s

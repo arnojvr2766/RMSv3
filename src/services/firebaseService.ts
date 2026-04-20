@@ -54,7 +54,9 @@ export interface Room {
     paymentMethods: string[];
     usesFacilityDefaults: boolean; // Track if using facility defaults or custom rules
   };
-  status: 'available' | 'occupied' | 'maintenance' | 'unavailable';
+  status: 'available' | 'occupied' | 'maintenance' | 'unavailable' | 'locked' | 'empty';
+  lastOccupancyState?: 'locked' | 'empty';
+  lastMonthStatus?: 'available' | 'occupied' | 'maintenance' | 'unavailable' | 'locked' | 'empty';
   description?: string;
   floorLevel?: number;
   squareMeters?: number;
@@ -128,6 +130,11 @@ export interface LeaseAgreement {
     paymentMethods: string[];
   };
   additionalTerms?: string;
+  // Document upload fields
+  signedLeasePhotoUrl?: string;
+  idDocumentPhotoUrl?: string;
+  acceptedAt?: Timestamp;
+  acceptedBy?: string;
   status: 'active' | 'expired' | 'terminated' | 'pending';
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -261,6 +268,62 @@ export interface MaintenanceExpense {
   updatedAt: Timestamp;
 }
 
+export interface Notification {
+  id?: string;
+  userId: string; // System admin or standard user ID
+  type: 'lease_expiry' | 'payment_overdue' | 'approval_required' | 'maintenance_due' | 'room_unlocked' | 'room_locked';
+  title: string;
+  message: string;
+  relatedId?: string; // leaseId, paymentScheduleId, etc.
+  read: boolean;
+  createdAt: Timestamp;
+  expiresAt?: Timestamp; // For lease expiry notifications
+  actionUrl?: string; // Deep link to related page
+}
+
+export interface InspectionChecklistItem {
+  id: string;
+  section: string; // Section name (e.g., "Room Inside", "Doors")
+  itemName: string;
+  itemNumber: number; // Item number (1-37)
+  condition: 'yes' | 'no'; // Yes = good/pass, No = issue/problem
+  notes?: string;
+  repairCost: number; // Cost if item needs repair (0 if no repair needed, only set if condition is 'no')
+  afterCondition?: 'yes' | 'no'; // After inspection condition (for post-inspection)
+  afterNotes?: string;
+}
+
+export interface Inspection {
+  id?: string;
+  leaseId: string;
+  facilityId: string;
+  roomId: string;
+  renterId: string;
+  type: 'pre' | 'post';
+  // Meta fields
+  roomNumber?: string;
+  formNumber?: string;
+  // Checklist items
+  checklistItems: InspectionChecklistItem[];
+  beforePhotos: string[]; // Firebase Storage URLs
+  afterPhotos?: string[]; // Firebase Storage URLs (for post-inspection)
+  totalRepairCost: number; // Sum of all repair costs from checklist items
+  // Signature fields
+  tenantName?: string;
+  tenantSignature?: string; // Base64 or URL to signature image
+  tenantSignatureDate?: Timestamp;
+  caretakerName?: string;
+  caretakerSignature?: string; // Base64 or URL to signature image
+  caretakerSignatureDate?: Timestamp;
+  // Other fields
+  comments?: string; // "Any other comments from TENANT please write here:"
+  inspectedBy: string; // User ID
+  inspectionDate: Timestamp;
+  status: 'draft' | 'completed';
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 // Facility Services
 export const facilityService = {
   // Create a new facility
@@ -291,6 +354,24 @@ export const facilityService = {
       })) as Facility[];
     } catch (error) {
       console.error('Error getting facilities:', error);
+      throw error;
+    }
+  },
+
+  // Get facility by ID
+  async getFacilityById(facilityId: string): Promise<Facility | null> {
+    try {
+      const facilityRef = doc(db, 'facilities', facilityId);
+      const facilitySnap = await getDoc(facilityRef);
+      if (!facilitySnap.exists()) {
+        return null;
+      }
+      return {
+        id: facilitySnap.id,
+        ...facilitySnap.data()
+      } as Facility;
+    } catch (error) {
+      console.error('Error getting facility by ID:', error);
       throw error;
     }
   },
@@ -718,6 +799,24 @@ export const paymentScheduleService = {
       return docRef.id;
     } catch (error) {
       console.error('Error creating payment schedule:', error);
+      throw error;
+    }
+  },
+
+  // Get payment schedule by ID
+  async getPaymentScheduleById(scheduleId: string): Promise<PaymentSchedule | null> {
+    try {
+      const docRef = doc(db, 'payment_schedules', scheduleId);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) return null;
+      
+      return {
+        id: docSnap.id,
+        ...docSnap.data()
+      } as PaymentSchedule;
+    } catch (error) {
+      console.error('Error getting payment schedule by ID:', error);
       throw error;
     }
   },

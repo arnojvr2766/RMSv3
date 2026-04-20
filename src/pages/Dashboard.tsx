@@ -1,62 +1,85 @@
-import React from 'react';
-import { Building, CreditCard, Users, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Building, CreditCard, Users, AlertCircle, CheckCircle, TrendingUp, DoorClosed, RefreshCw, FileText } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import SystemAdminDashboardSimple from './SystemAdminDashboardSimple';
+import NewRentalWizard from '../components/forms/NewRentalWizard';
 import { useRole } from '../contexts/RoleContext';
+import { dashboardService, type DashboardMetrics } from '../services/dashboardService';
+import { StatCardsSkeleton } from '../components/ui/SkeletonLoader';
 
 const Dashboard: React.FC = () => {
-  const { isSystemAdmin, currentRole } = useRole();
+  const { isSystemAdmin } = useRole();
+  const navigate = useNavigate();
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
 
-  // Debug logging
-  console.log('🔍 Dashboard - Current role:', currentRole);
-  console.log('🔍 Dashboard - Is System Admin:', isSystemAdmin);
-
-  // If user is System Admin, show the comprehensive dashboard
-  if (isSystemAdmin) {
-    console.log('🔍 Dashboard - Loading SystemAdminDashboardSimple');
-    return <SystemAdminDashboardSimple />;
-  }
-
-  console.log('🔍 Dashboard - Loading standard dashboard');
-
-  // Mock data - will be replaced with real data from Firebase
-  const stats = {
-    totalIncome: 45230,
-    occupancyRate: 87,
-    overduePayments: 3,
-    pendingApprovals: 7,
+  const loadMetrics = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const data = await dashboardService.getDashboardMetrics();
+      setMetrics(data);
+    } catch (err) {
+      setError('Could not load dashboard data.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const recentPayments = [
-    { id: '1', room: '101', tenant: 'John Doe', amount: 1500, status: 'posted' },
-    { id: '2', room: '102', tenant: 'Jane Smith', amount: 1800, status: 'posted' },
-    { id: '3', room: '103', tenant: 'Bob Johnson', amount: 1200, status: 'pending' },
-  ];
+  useEffect(() => { loadMetrics(); }, []);
+
+  if (isSystemAdmin) return <SystemAdminDashboardSimple />;
+
+  const STATUS_BADGE: Record<string, string> = {
+    paid:     'bg-green-500/20 text-green-400',
+    posted:   'bg-green-500/20 text-green-400',
+    pending:  'bg-yellow-500/20 text-yellow-400',
+    overdue:  'bg-red-500/20 text-red-400',
+    partial:  'bg-blue-500/20 text-blue-400',
+  };
 
   return (
-    <div className="w-full">
-        {/* Header */}
-        <div className="mb-4 md:mb-8">
-          <h1 className="text-xl md:text-3xl font-bold text-white">
-            Rental Management Dashboard
-          </h1>
-          <p className="mt-1 md:mt-2 text-xs md:text-base text-secondary">
-            Welcome back! Here's what's happening with your properties.
-          </p>
+    <div className="w-full space-y-6 pb-8">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-white">Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-400">Welcome back — here's what's happening.</p>
         </div>
+        <Button variant="ghost" onClick={loadMetrics} disabled={isLoading} title="Refresh">
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-8">
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* Stats Grid */}
+      {isLoading ? (
+        <StatCardsSkeleton count={4} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
           <Card>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs md:text-sm font-medium text-secondary">Total Income</p>
-                <p className="text-lg md:text-2xl font-bold text-white">R {stats.totalIncome.toLocaleString()}</p>
-                <p className="text-xs md:text-sm text-success">+12% from last month</p>
+                <p className="text-xs font-medium text-gray-400">Monthly Revenue</p>
+                <p className="text-xl md:text-2xl font-bold text-white mt-0.5">
+                  R {(metrics?.totalMonthlyRevenue || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {metrics?.totalFacilities} facilit{metrics?.totalFacilities === 1 ? 'y' : 'ies'}
+                </p>
               </div>
-              <div className="p-2 md:p-3 bg-primary-500/20 rounded-full">
-                <CreditCard className="w-5 h-5 md:w-6 md:h-6 text-primary-500" />
+              <div className="p-2 bg-yellow-500/20 rounded-full">
+                <CreditCard className="w-5 h-5 text-yellow-400" />
               </div>
             </div>
           </Card>
@@ -64,25 +87,16 @@ const Dashboard: React.FC = () => {
           <Card>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs md:text-sm font-medium text-secondary">Occupancy Rate</p>
-                <p className="text-lg md:text-2xl font-bold text-white">{stats.occupancyRate}%</p>
-                <p className="text-xs md:text-sm text-success">+3% from last month</p>
+                <p className="text-xs font-medium text-gray-400">Occupancy Rate</p>
+                <p className="text-xl md:text-2xl font-bold text-white mt-0.5">
+                  {Math.round(metrics?.occupancyRate || 0)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {metrics?.occupiedRooms} / {metrics?.totalRooms} rooms
+                </p>
               </div>
-              <div className="p-2 md:p-3 bg-accent-green-500/20 rounded-full">
-                <Building className="w-5 h-5 md:w-6 md:h-6 text-accent-green-500" />
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs md:text-sm font-medium text-secondary">Overdue Payments</p>
-                <p className="text-lg md:text-2xl font-bold text-error">{stats.overduePayments}</p>
-                <p className="text-xs md:text-sm text-error">Needs attention</p>
-              </div>
-              <div className="p-2 md:p-3 bg-error/20 rounded-full">
-                <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-error" />
+              <div className="p-2 bg-green-500/20 rounded-full">
+                <Building className="w-5 h-5 text-green-400" />
               </div>
             </div>
           </Card>
@@ -90,94 +104,137 @@ const Dashboard: React.FC = () => {
           <Card>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs md:text-sm font-medium text-secondary">Pending Approvals</p>
-                <p className="text-lg md:text-2xl font-bold text-white">{stats.pendingApprovals}</p>
-                <p className="text-xs md:text-sm text-warning">Awaiting review</p>
+                <p className="text-xs font-medium text-gray-400">Overdue Payments</p>
+                <p className={`text-xl md:text-2xl font-bold mt-0.5 ${(metrics?.overduePayments || 0) > 0 ? 'text-red-400' : 'text-white'}`}>
+                  {metrics?.overduePayments || 0}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  R {(metrics?.overdueAmount || 0).toLocaleString()} owed
+                </p>
               </div>
-              <div className="p-2 md:p-3 bg-warning/20 rounded-full">
-                <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-warning" />
+              <div className="p-2 bg-red-500/20 rounded-full">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-400">Active Tenants</p>
+                <p className="text-xl md:text-2xl font-bold text-white mt-0.5">
+                  {metrics?.totalActiveTenants || 0}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {metrics?.pendingPayments || 0} pending payments
+                </p>
+              </div>
+              <div className="p-2 bg-blue-500/20 rounded-full">
+                <Users className="w-5 h-5 text-blue-400" />
               </div>
             </div>
           </Card>
         </div>
+      )}
 
-        {/* Quick Actions */}
-        <div className="mb-4 md:mb-8">
-          <h2 className="text-base md:text-xl font-semibold text-white mb-3 md:mb-4">Quick Actions</h2>
-          <div className="flex flex-wrap gap-2 md:gap-3">
-            <Button variant="primary">
-              <CreditCard className="w-4 h-4 mr-2" />
-              New Payment
-            </Button>
-            <Button variant="secondary">
-              <Users className="w-4 h-4 mr-2" />
-              Add Tenant
-            </Button>
-            <Button variant="accent">
-              <AlertCircle className="w-4 h-4 mr-2" />
-              New Complaint
-            </Button>
-            <Button variant="outline">
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Approve
-            </Button>
-          </div>
+      {/* Quick Actions */}
+      <div>
+        <h2 className="text-base font-semibold text-white mb-3">Quick Actions</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => setShowWizard(true)}>
+            <FileText className="w-4 h-4 mr-2" />
+            New Rental Agreement
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/payments')}>
+            <CreditCard className="w-4 h-4 mr-2" />
+            Record Payment
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/renters')}>
+            <Users className="w-4 h-4 mr-2" />
+            Add Tenant
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/complaints')}>
+            <AlertCircle className="w-4 h-4 mr-2" />
+            New Complaint
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/leases')}>
+            <CheckCircle className="w-4 h-4 mr-2" />
+            View Leases
+          </Button>
         </div>
+      </div>
 
+      {showWizard && (
+        <NewRentalWizard onClose={() => { setShowWizard(false); loadMetrics(); }} />
+      )}
+
+      {/* Bottom grid — recent payments + facility overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Recent Payments */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Recent Payments</h3>
-              <Button variant="ghost" size="sm">View All</Button>
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-white">Recent Payments</h3>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/payments')}>View All</Button>
+          </div>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-14 bg-gray-700/60 rounded-lg animate-pulse" />)}
             </div>
-            <div className="space-y-3">
-              {recentPayments.map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
-                  <div>
-                    <p className="font-medium text-white">Room {payment.room}</p>
-                    <p className="text-sm text-secondary">{payment.tenant}</p>
+          ) : (metrics?.recentPayments || []).length === 0 ? (
+            <p className="text-gray-500 text-sm text-center py-6">No recent payments.</p>
+          ) : (
+            <div className="space-y-2">
+              {(metrics?.recentPayments || []).slice(0, 4).map((p: any) => (
+                <div key={p.id} className="flex items-center justify-between p-3 bg-gray-700/60 rounded-lg">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white truncate">Room {p.room}</p>
+                    <p className="text-xs text-gray-400 truncate">{p.tenant}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-white">R {payment.amount}</p>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      payment.status === 'posted' 
-                        ? 'bg-success/20 text-success'
-                        : 'bg-warning/20 text-warning'
-                    }`}>
-                      {payment.status}
+                  <div className="text-right flex-shrink-0 ml-3">
+                    <p className="text-sm font-semibold text-white">R {p.amount?.toLocaleString()}</p>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_BADGE[p.status] || 'bg-gray-500/20 text-gray-400'}`}>
+                      {p.status}
                     </span>
                   </div>
                 </div>
               ))}
             </div>
-          </Card>
+          )}
+        </Card>
 
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Facility Overview</h3>
-              <Button variant="ghost" size="sm">Manage</Button>
-            </div>
+        {/* Portfolio Summary */}
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-white">Portfolio Summary</h3>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/facilities')}>Manage</Button>
+          </div>
+          {isLoading ? (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-secondary">Total Facilities</span>
-                <span className="font-semibold text-white">3</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-secondary">Total Rooms</span>
-                <span className="font-semibold text-white">24</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-secondary">Active Tenants</span>
-                <span className="font-semibold text-white">18</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-secondary">Available Rooms</span>
-                <span className="font-semibold text-white">6</span>
-              </div>
+              {[1,2,3,4].map(i => <div key={i} className="h-6 bg-gray-700/60 rounded animate-pulse" />)}
             </div>
-          </Card>
-        </div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { label: 'Facilities', value: metrics?.totalFacilities ?? '—', icon: Building, color: 'text-yellow-400' },
+                { label: 'Total Rooms', value: metrics?.totalRooms ?? '—', icon: DoorClosed, color: 'text-blue-400' },
+                { label: 'Available Rooms', value: metrics?.availableRooms ?? '—', icon: TrendingUp, color: 'text-green-400' },
+                { label: 'Collection Rate', value: `${Math.round(metrics?.paymentCollectionRate || 0)}%`, icon: CreditCard, color: 'text-purple-400' },
+              ].map(row => {
+                const Icon = row.icon;
+                return (
+                  <div key={row.label} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-4 h-4 ${row.color}`} />
+                      <span className="text-sm text-gray-400">{row.label}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-white">{row.value}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 };

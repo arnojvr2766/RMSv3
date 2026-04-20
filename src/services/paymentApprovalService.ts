@@ -9,7 +9,10 @@ import {
   Timestamp 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { paymentScheduleService } from './firebaseService';
+import { paymentScheduleService, roomService } from './firebaseService';
+import { roomStatusHistoryService } from './roomStatusHistoryService';
+import { notificationService } from './notificationService';
+import { userService } from './userService';
 
 export interface PaymentApproval {
   id: string;
@@ -123,6 +126,31 @@ class PaymentApprovalService {
       );
 
       console.log(`Payment ${month} approved by ${approvedBy}`);
+
+      // Auto-unlock room if it was locked — set back to occupied after payment
+      try {
+        const room = await roomService.getRoomById(schedule.roomId);
+        if (room && room.status === 'locked') {
+          await roomStatusHistoryService.updateRoomStatus(schedule.roomId, 'occupied');
+          // Notify system admins
+          const allUsers = await userService.getAllUsers();
+          const admins = allUsers.filter(u => u.role === 'system_admin' && u.status === 'active');
+          await Promise.all(admins.map(admin =>
+            notificationService.createNotification({
+              userId: admin.id,
+              type: 'room_unlocked',
+              title: 'Room Auto-Unlocked',
+              message: `Room ${room.roomNumber} has been set to Occupied after payment approval for ${month}.`,
+              relatedId: schedule.roomId,
+              read: false,
+              actionUrl: `/rooms`,
+            })
+          ));
+        }
+      } catch (unlockError) {
+        // Log but don't fail the approval if unlock fails
+        console.error('Error auto-unlocking room after payment approval:', unlockError);
+      }
     } catch (error) {
       console.error('Error approving payment:', error);
       throw error;

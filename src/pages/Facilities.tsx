@@ -5,6 +5,7 @@ import { useRole } from '../contexts/RoleContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { facilityService } from '../services/firebaseService';
 import { facilityStatsService } from '../services/facilityStatsService';
+import { CardGridSkeleton } from '../components/ui/SkeletonLoader';
 
 // Facility statistics interface
 interface FacilityStats {
@@ -39,6 +40,7 @@ interface Facility {
   updatedAt: any;
 }
 import FacilityForm from '../components/forms/FacilityForm';
+import FacilityDetailModal from '../components/forms/FacilityDetailModal';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 
@@ -52,6 +54,8 @@ const Facilities: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
   
+  const [viewingFacility, setViewingFacility] = useState<Facility | null>(null);
+
   // View and search state
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [searchTerm, setSearchTerm] = useState('');
@@ -270,9 +274,7 @@ const Facilities: React.FC = () => {
 
         {/* Facilities List */}
         {isLoading ? (
-          <div className="flex justify-center items-center py-8 md:py-12">
-            <div className="animate-spin rounded-full h-6 w-6 md:h-8 md:w-8 border-b-2 border-primary-500"></div>
-          </div>
+          <CardGridSkeleton cards={6} />
         ) : facilities.length === 0 ? (
           <Card className="text-center py-8 md:py-12">
             <Building2 className="w-12 h-12 md:w-16 md:h-16 text-gray-500 mx-auto mb-3 md:mb-4" />
@@ -328,24 +330,33 @@ const Facilities: React.FC = () => {
                       }`}>
                         {facility.status}
                       </div>
-                      {canManageFacilities && (
-                        <div className="flex items-center space-x-1">
-                          <button
-                            onClick={() => handleEdit(facility)}
-                            className="p-1 text-gray-400 hover:text-white transition-colors"
-                            title="Edit Facility"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => facility.id && handleDelete(facility.id)}
-                            className="p-1 text-gray-400 hover:text-red-400 transition-colors"
-                            title="Delete Facility"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => setViewingFacility(facility)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {canManageFacilities && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(facility)}
+                              className="p-1 text-gray-400 hover:text-white transition-colors"
+                              title="Edit Facility"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => facility.id && handleDelete(facility.id)}
+                              className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                              title="Delete Facility"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -567,6 +578,14 @@ const Facilities: React.FC = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-2">
+                            {/* View Details */}
+                            <button
+                              onClick={() => setViewingFacility(facility)}
+                              className="p-1 text-gray-400 hover:text-white transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
                             {/* Edit/Delete Actions */}
                             {canManageFacilities && (
                               <>
@@ -738,6 +757,15 @@ const Facilities: React.FC = () => {
         </div>
         )}
       </div>
+
+      {/* Facility Detail Modal */}
+      {viewingFacility && (
+        <FacilityDetailModal
+          facility={viewingFacility}
+          stats={viewingFacility.id ? facilityStats[viewingFacility.id] : undefined}
+          onClose={() => setViewingFacility(null)}
+        />
+      )}
     </div>
   );
 };

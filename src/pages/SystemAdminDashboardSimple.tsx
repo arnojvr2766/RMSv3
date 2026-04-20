@@ -1,17 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  TrendingUp, 
-  DollarSign, 
-  Building, 
-  Users, 
-  AlertTriangle, 
+import {
+  TrendingUp,
+  DollarSign,
+  Building,
+  Users,
+  AlertTriangle,
   CheckCircle,
   RefreshCw,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import NewRentalWizard from '../components/forms/NewRentalWizard';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import QuickPaymentCapture from '../components/forms/QuickPaymentCapture';
@@ -146,6 +148,7 @@ const SystemAdminDashboardSimple: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   
   // Modal states for quick actions
+  const [showRentalWizard, setShowRentalWizard] = React.useState(false);
   const [showQuickPaymentCapture, setShowQuickPaymentCapture] = React.useState(false);
   const [showRenterForm, setShowRenterForm] = React.useState(false);
   const [showRoomForm, setShowRoomForm] = React.useState(false);
@@ -161,17 +164,28 @@ const SystemAdminDashboardSimple: React.FC = () => {
       console.log('📊 Fetching real dashboard data...');
       
       // Fetch all collections
-      const [facilitiesSnapshot, roomsSnapshot, rentersSnapshot, paymentSchedulesSnapshot] = await Promise.all([
+      const [facilitiesSnapshot, roomsSnapshot, rentersSnapshot, paymentSchedulesSnapshot, usersSnapshot] = await Promise.all([
         getDocs(collection(db, 'facilities')),
         getDocs(collection(db, 'rooms')),
         getDocs(collection(db, 'renters')),
-        getDocs(collection(db, 'payment_schedules'))
+        getDocs(collection(db, 'payment_schedules')),
+        getDocs(collection(db, 'users'))
       ]);
 
       const facilities = facilitiesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       const rooms = roomsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       const renters = rentersSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       const paymentSchedules = paymentSchedulesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      const users = usersSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as any[];
+
+      // Build a uid → display name lookup
+      const userNameById: Record<string, string> = {};
+      users.forEach((u: any) => {
+        const name = u.profile
+          ? `${u.profile.firstName || ''} ${u.profile.lastName || ''}`.trim()
+          : (u.email || u.id);
+        if (name) userNameById[u.id] = name;
+      });
 
       // Calculate real metrics
       const totalRooms = rooms.length;
@@ -250,7 +264,7 @@ const SystemAdminDashboardSimple: React.FC = () => {
                 description: `Payment of R${payment.amount || payment.paidAmount} received for ${room?.roomNumber || 'Room'}`,
                 timestamp: payment.paidDate.toDate ? payment.paidDate.toDate().toISOString() : new Date().toISOString(),
                 amount: payment.amount || payment.paidAmount,
-                user: payment.capturedBy || 'System',
+                user: (payment.capturedBy && userNameById[payment.capturedBy]) || payment.capturedBy || 'System',
                 facility: facility?.name,
                 room: room?.roomNumber,
                 tenant: renter ? `${renter.personalInfo?.firstName} ${renter.personalInfo?.lastName}` : 'Unknown',
@@ -326,6 +340,9 @@ const SystemAdminDashboardSimple: React.FC = () => {
     console.log('🚀 Quick action clicked:', action);
     console.log('🚀 Dashboard facilities:', facilities);
     switch (action) {
+      case 'rental':
+        setShowRentalWizard(true);
+        break;
       case 'payment':
         setShowQuickPaymentCapture(true);
         break;
@@ -500,6 +517,7 @@ const SystemAdminDashboardSimple: React.FC = () => {
           <h2 className="text-lg md:text-2xl font-bold text-white mb-3 md:mb-6">Quick Actions</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-4">
             {[
+              { title: 'New Rental Agreement', icon: FileText, color: 'bg-yellow-500/20 text-yellow-400', action: 'rental' },
               { title: 'Capture Payment', icon: DollarSign, color: 'bg-blue-500/20 text-blue-400', action: 'payment' },
               { title: 'Add Tenant', icon: Users, color: 'bg-green-500/20 text-green-400', action: 'tenant' },
               { title: 'Add Room', icon: Building, color: 'bg-purple-500/20 text-purple-400', action: 'room' },
@@ -654,6 +672,16 @@ const SystemAdminDashboardSimple: React.FC = () => {
             />
           </div>
         </div>
+      )}
+
+      {/* New Rental Wizard */}
+      {showRentalWizard && (
+        <NewRentalWizard
+          onClose={() => {
+            setShowRentalWizard(false);
+            fetchRealData();
+          }}
+        />
       )}
 
       {/* Add Renter Modal */}

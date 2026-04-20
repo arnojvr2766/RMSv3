@@ -15,6 +15,7 @@ import {
   Users
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
+import { useToast } from '../contexts/ToastContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { 
   facilityService, 
@@ -22,6 +23,7 @@ import {
   maintenanceExpenseService
 } from '../services/firebaseService';
 import Button from '../components/ui/Button';
+import { PageLoader } from '../components/ui/SkeletonLoader';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import MaintenanceExpenseForm from '../components/forms/MaintenanceExpenseForm';
@@ -63,6 +65,7 @@ interface Room {
 
 const Maintenance: React.FC = () => {
   const { currentRole, isSystemAdmin } = useRole();
+  const { showError } = useToast();
   const { allowStandardUserRooms } = useSettings();
   
   // State
@@ -201,7 +204,7 @@ const Maintenance: React.FC = () => {
       await loadData(); // Reload data
     } catch (error) {
       console.error('Error deleting maintenance expense:', error);
-      alert('Failed to delete maintenance expense. Please try again.');
+      showError('Failed to delete maintenance expense. Please try again.');
     }
   };
 
@@ -243,11 +246,8 @@ const Maintenance: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-secondary-900 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading maintenance data...</p>
-        </div>
+      <div className="min-h-screen bg-secondary-900 p-6">
+        <PageLoader variant="table" />
       </div>
     );
   }

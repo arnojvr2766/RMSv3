@@ -8,6 +8,7 @@ import {
   maintenanceExpenseService,
   paymentScheduleService 
 } from '../../services/firebaseService';
+import { inspectionService } from '../../services/inspectionService';
 import { Timestamp } from 'firebase/firestore';
 import { useRole } from '../../contexts/RoleContext';
 
@@ -59,9 +60,12 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
   const [selectedExpenses, setSelectedExpenses] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingExpenses, setLoadingExpenses] = useState(true);
+  const [postInspection, setPostInspection] = useState<any>(null);
+  const [loadingInspection, setLoadingInspection] = useState(true);
 
   useEffect(() => {
     loadMaintenanceExpenses();
+    loadPostInspection();
   }, []);
 
   const loadMaintenanceExpenses = async () => {
@@ -84,6 +88,30 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
     }
   };
 
+  const loadPostInspection = async () => {
+    try {
+      setLoadingInspection(true);
+      if (!lease.id) {
+        setLoadingInspection(false);
+        return;
+      }
+      
+      const inspection = await inspectionService.getPostInspectionByLease(lease.id);
+      if (inspection) {
+        setPostInspection(inspection);
+        // Update deduction amount to include inspection repair costs
+        setFormData(prev => ({
+          ...prev,
+          deductionAmount: inspection.totalRepairCost || 0,
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading post-inspection:', error);
+    } finally {
+      setLoadingInspection(false);
+    }
+  };
+
   // Calculate total deductions
   const calculateDeductions = () => {
     const expenseDeductions = selectedExpenses.reduce((total, expenseId) => {
@@ -95,8 +123,11 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
       return total;
     }, 0);
 
+    // Include inspection repair costs
+    const inspectionRepairCosts = postInspection?.totalRepairCost || 0;
+
     const manualDeduction = formData.deductionAmount || 0;
-    return expenseDeductions + manualDeduction;
+    return expenseDeductions + inspectionRepairCosts + manualDeduction;
   };
 
   // Update payout amount when deductions change
@@ -127,6 +158,18 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate that post-inspection exists before allowing deposit refund
+    if (!lease.id) {
+      alert('Lease ID is missing.');
+      return;
+    }
+
+    const hasInspection = await inspectionService.hasPostInspection(lease.id);
+    if (!hasInspection) {
+      alert('A post-inspection must be completed before processing a deposit refund. Please complete the inspection first.');
+      return;
+    }
+
     if (formData.payoutAmount < 0) {
       alert('Payout amount cannot be negative.');
       return;
@@ -151,7 +194,10 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
         depositAmount: lease.terms.depositAmount,
         payoutAmount: formData.payoutAmount,
         deductionAmount: totalDeductions,
-        deductionReason: formData.deductionReason || 'Maintenance expenses and other deductions',
+        deductionReason: formData.deductionReason || 
+          (postInspection 
+            ? `Post-inspection repair costs (R${postInspection.totalRepairCost.toFixed(2)})${selectedExpenses.length > 0 ? ', maintenance expenses' : ''}`
+            : 'Maintenance expenses and other deductions'),
         maintenanceExpenses: selectedExpenses,
         payoutDate: Timestamp.fromDate(new Date(formData.payoutDate)),
         payoutMethod: formData.payoutMethod,
@@ -238,6 +284,42 @@ const DepositPayout: React.FC<DepositPayoutProps> = ({ lease, onSuccess, onCance
             </div>
           </div>
         </Card>
+
+        {/* Post-Inspection Repair Costs */}
+        {loadingInspection ? (
+          <Card className="p-6">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
+              <p className="text-gray-400">Loading inspection data...</p>
+            </div>
+          </Card>
+        ) : postInspection ? (
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+              <AlertTriangle className="w-5 h-5 mr-2 text-yellow-500" />
+              Post-Inspection Repair Costs
+            </h3>
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
+              <p className="text-white font-medium mb-2">Inspection completed on {postInspection.inspectionDate?.toDate?.()?.toLocaleDateString() || 'N/A'}</p>
+              <p className="text-gray-400 text-sm mb-3">Total repair costs from inspection:</p>
+              <p className="text-yellow-400 text-xl font-semibold">R{postInspection.totalRepairCost.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              <p className="text-gray-500 text-xs mt-2">These costs are automatically included in the deposit deduction.</p>
+            </div>
+          </Card>
+        ) : (
+          <Card className="p-6 border-yellow-500/30 bg-yellow-500/10">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5" />
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2">Post-Inspection Required</h3>
+                <p className="text-gray-400 text-sm">
+                  A post-inspection must be completed before processing a deposit refund. 
+                  The inspection will determine repair costs that will be deducted from the deposit.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Maintenance Expenses */}
         {loadingExpenses ? (

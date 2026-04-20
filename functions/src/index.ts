@@ -1,16 +1,34 @@
 import * as functions from 'firebase-functions';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onCall } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
+import { genkit } from 'genkit';
+import { googleAI } from '@genkit-ai/googleai';
+import { HELP_KNOWLEDGE } from './helpKnowledge';
 
 // Initialize Firebase Admin
 admin.initializeApp();
 
-// Gmail SMTP configuration
+const db = admin.firestore();
+
+// Genkit AI — Google AI Studio key (set via: firebase functions:secrets:set GEMINI_API_KEY)
+let _ai: ReturnType<typeof genkit> | null = null;
+function getAI() {
+  if (!_ai) {
+    _ai = genkit({ plugins: [googleAI({ apiKey: process.env.GEMINI_API_KEY })] });
+  }
+  return _ai;
+}
+
+// Gmail SMTP configuration — credentials must be set via Firebase secrets:
+//   firebase functions:secrets:set EMAIL_USER
+//   firebase functions:secrets:set EMAIL_PASSWORD
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'arnoj17@gmail.com',
-    pass: process.env.EMAIL_PASSWORD || 'wlxi tjcd jzps rvhj',
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
   },
 });
 
@@ -19,6 +37,61 @@ export const helloWorld = functions.https.onRequest((request, response) => {
   response.json({ message: 'Hello from Firebase Functions!' });
 });
 
+// ─── Help Chat ────────────────────────────────────────────────────────────────
+interface ChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}
+
+export const helpChat = onCall(
+  { secrets: ['GEMINI_API_KEY'] },
+  async (request) => {
+    const { message, history } = request.data as {
+      message: string;
+      history?: ChatMessage[];
+    };
+
+    if (!message || typeof message !== 'string') {
+      throw new functions.https.HttpsError('invalid-argument', 'message is required');
+    }
+
+    const messages = [
+      ...((history || []).slice(-10).map((h) => ({
+        role: h.role as 'user' | 'model',
+        content: [{ text: h.content }],
+      }))),
+      { role: 'user' as const, content: [{ text: message }] },
+    ];
+
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await getAI().generate({
+          model: 'googleai/gemini-2.5-flash-lite',
+          system: HELP_KNOWLEDGE,
+          messages,
+        });
+        return { reply: response.text };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isRateLimit = msg.includes('429') || msg.includes('quota') || msg.includes('rate');
+        console.error(`helpChat attempt ${attempt + 1} error:`, msg);
+
+        if (isRateLimit && attempt < 2) {
+          await sleep(1500 * (attempt + 1)); // 1.5s, then 3s
+          continue;
+        }
+        if (isRateLimit) {
+          throw new functions.https.HttpsError('resource-exhausted', 'AI service is busy. Please try again in a moment.');
+        }
+        throw new functions.https.HttpsError('internal', 'Failed to generate a response.');
+      }
+    }
+    throw new functions.https.HttpsError('internal', 'Failed to generate a response.');
+  }
+);
+
 // Send invitation email function
 export const sendInvitationEmail = functions.https.onRequest(
   async (request, response) => {
@@ -26,7 +99,7 @@ export const sendInvitationEmail = functions.https.onRequest(
     response.set('Access-Control-Allow-Origin', '*');
     response.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     response.set('Access-Control-Allow-Headers', 'Content-Type');
-    
+
     if (request.method === 'OPTIONS') {
       response.status(204).send('');
       return;
@@ -41,7 +114,7 @@ export const sendInvitationEmail = functions.https.onRequest(
       }
 
       const roleDisplay = role === 'system_admin' ? 'System Administrator' : 'Standard User';
-      
+
       const htmlContent = `
         <!DOCTYPE html>
         <html>
@@ -211,7 +284,7 @@ export const sendInvitationEmail = functions.https.onRequest(
             <div class="content">
               <h2 class="greeting">Welcome, ${firstName}!</h2>
               <p class="message">
-                You've been invited to join RentDesk, our comprehensive rental management system. 
+                You've been invited to join RentDesk, our comprehensive rental management system.
                 Your administrator has created an account for you with <strong>${roleDisplay}</strong> privileges.
               </p>
               <div class="role-badge">${roleDisplay}</div>
@@ -233,13 +306,13 @@ export const sendInvitationEmail = functions.https.onRequest(
                 </ul>
               </div>
               <p class="message">
-                Once you set up your password, you'll have full access to the RentDesk dashboard 
+                Once you set up your password, you'll have full access to the RentDesk dashboard
                 and can start managing your rental properties immediately.
               </p>
             </div>
             <div class="footer">
               <p>This invitation was sent by your RentDesk administrator.</p>
-              <p>If you didn't expect this invitation, please contact your administrator or 
+              <p>If you didn't expect this invitation, please contact your administrator or
                 <a href="mailto:support@rentdesk.com">support@rentdesk.com</a>
               </p>
               <p style="margin-top: 20px; font-size: 12px;">© 2025 RentDesk. All rights reserved.</p>
@@ -250,19 +323,218 @@ export const sendInvitationEmail = functions.https.onRequest(
       `;
 
       const mailOptions = {
-        from: 'RentDesk <arnoj17@gmail.com>',
+        from: `RentDesk <${process.env.EMAIL_USER}>`,
         to: email,
         subject: 'Welcome to RentDesk - Set Up Your Account',
         html: htmlContent,
       };
 
       await transporter.sendMail(mailOptions);
-      
+
       console.log(`Invitation email sent to ${email}`);
       response.json({ success: true, message: 'Email sent successfully' });
     } catch (error) {
       console.error('Error sending invitation email:', error);
       response.status(500).json({ error: 'Failed to send email' });
     }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Scheduled: Check lease expiry and send reminder notifications
+// Runs daily at 9:00 AM UTC
+// ---------------------------------------------------------------------------
+export const checkLeaseExpiryReminders = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'UTC' },
+  async (_event) => {
+    try {
+      const today = new Date();
+      const oneMonthFromNow = new Date(today);
+      oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+
+      const leasesSnap = await db.collection('leases')
+        .where('status', '==', 'active')
+        .get();
+
+      let remindersCreated = 0;
+
+      for (const leaseDoc of leasesSnap.docs) {
+        const lease = leaseDoc.data();
+        if (!lease.endDate) continue;
+
+        const endDate = lease.endDate.toDate ? lease.endDate.toDate() : new Date(lease.endDate);
+        const daysUntilExpiry = Math.ceil(
+          (endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        // Send reminders at ~30, 21, 14, and 7 days before expiry
+        const reminderThresholds = [30, 21, 14, 7];
+        const shouldRemind = reminderThresholds.some(
+          (threshold) => daysUntilExpiry <= threshold && daysUntilExpiry > threshold - 1
+        );
+
+        if (!shouldRemind) continue;
+
+        // Check for existing reminder at this threshold to avoid duplicates
+        const existingSnap = await db.collection('notifications')
+          .where('relatedId', '==', leaseDoc.id)
+          .where('type', '==', 'lease_expiry')
+          .get();
+
+        const alreadySentToday = existingSnap.docs.some((doc) => {
+          const created = doc.data().createdAt?.toDate?.();
+          if (!created) return false;
+          return (
+            created.toDateString() === today.toDateString()
+          );
+        });
+
+        if (alreadySentToday) continue;
+
+        // Notify the tenant's assigned users (facility admins / system admins)
+        const usersSnap = await db.collection('users')
+          .where('status', '==', 'active')
+          .where('role', 'in', ['system_admin', 'facility_admin'])
+          .get();
+
+        const batch = db.batch();
+        for (const userDoc of usersSnap.docs) {
+          const notifRef = db.collection('notifications').doc();
+          batch.set(notifRef, {
+            userId: userDoc.id,
+            type: 'lease_expiry',
+            title: 'Lease Expiring Soon',
+            message: `Lease ${leaseDoc.id} expires in ${daysUntilExpiry} day(s) (${endDate.toLocaleDateString()}).`,
+            relatedId: leaseDoc.id,
+            read: false,
+            actionUrl: '/leases',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          remindersCreated++;
+        }
+        await batch.commit();
+      }
+
+      console.log(`Lease expiry check complete. Reminders created: ${remindersCreated}`);
+    } catch (error) {
+      console.error('Error in checkLeaseExpiryReminders:', error);
+    }
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Scheduled: Auto-lock rooms with overdue rent
+// Runs daily at 8:00 AM UTC
+// ---------------------------------------------------------------------------
+export const checkOverdueRoomsAutoLock = onSchedule(
+  { schedule: '0 8 * * *', timeZone: 'UTC' },
+  async (_event) => {
+    let locked = 0;
+    let errors = 0;
+
+    try {
+      // Get org settings for autoLockAfterDays threshold
+      const settingsSnap = await db.collection('organizationSettings').limit(1).get();
+      const autoLockAfterDays: number =
+        settingsSnap.empty ? 5 : (settingsSnap.docs[0].data().autoLockAfterDays ?? 5);
+
+      const today = new Date();
+      const dayOfMonth = today.getDate();
+
+      if (dayOfMonth <= autoLockAfterDays) {
+        console.log(`Auto-lock skipped: day ${dayOfMonth} <= threshold ${autoLockAfterDays}`);
+        return;
+      }
+
+      const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+      // Get all occupied rooms
+      const roomsSnap = await db.collection('rooms').where('status', '==', 'occupied').get();
+      if (roomsSnap.empty) {
+        console.log('No occupied rooms found.');
+        return;
+      }
+
+      // Get active leases and build roomId → leaseId map
+      const leasesSnap = await db.collection('leases').where('status', '==', 'active').get();
+      const leaseByRoom = new Map<string, string>();
+      for (const doc of leasesSnap.docs) {
+        leaseByRoom.set(doc.data().roomId, doc.id);
+      }
+
+      // Get system admins for notifications
+      const adminsSnap = await db.collection('users')
+        .where('role', '==', 'system_admin')
+        .where('status', '==', 'active')
+        .get();
+      const adminIds = adminsSnap.docs.map((d) => d.id);
+
+      for (const roomDoc of roomsSnap.docs) {
+        try {
+          const room = roomDoc.data();
+          const roomId = roomDoc.id;
+          const leaseId = leaseByRoom.get(roomId);
+          if (!leaseId) continue;
+
+          // Check payment schedule for current month
+          const scheduleSnap = await db.collection('paymentSchedules')
+            .where('leaseId', '==', leaseId)
+            .limit(1)
+            .get();
+          if (scheduleSnap.empty) continue;
+
+          const schedule = scheduleSnap.docs[0].data();
+          const payments: Array<{ month: string; status: string }> = schedule.payments ?? [];
+          const currentPayment = payments.find((p) => p.month === currentMonth);
+
+          if (!currentPayment || currentPayment.status !== 'pending') continue;
+
+          // Lock the room
+          await roomDoc.ref.update({
+            status: 'locked',
+            lastStatusChange: admin.firestore.FieldValue.serverTimestamp(),
+            lastOccupancyState: 'occupied',
+          });
+
+          // Add to room status history
+          await db.collection('roomStatusHistory').add({
+            roomId,
+            fromStatus: 'occupied',
+            toStatus: 'locked',
+            changedAt: admin.firestore.FieldValue.serverTimestamp(),
+            changedBy: 'system',
+            reason: `Auto-locked: no payment for ${currentMonth} by day ${dayOfMonth}`,
+          });
+
+          // Notify system admins
+          const batch = db.batch();
+          for (const adminId of adminIds) {
+            const notifRef = db.collection('notifications').doc();
+            batch.set(notifRef, {
+              userId: adminId,
+              type: 'room_locked',
+              title: 'Room Auto-Locked: Overdue Rent',
+              message: `Room ${room.roomNumber} has been automatically locked. No payment received for ${currentMonth} (day ${dayOfMonth} of month).`,
+              relatedId: roomId,
+              read: false,
+              actionUrl: '/rooms',
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+          await batch.commit();
+
+          locked++;
+          console.log(`Locked room ${room.roomNumber} (${roomId})`);
+        } catch (roomError) {
+          console.error(`Error processing room ${roomDoc.id}:`, roomError);
+          errors++;
+        }
+      }
+    } catch (error) {
+      console.error('Error in checkOverdueRoomsAutoLock:', error);
+      errors++;
+    }
+
+    console.log(`Auto-lock complete. Locked: ${locked}, Errors: ${errors}`);
   }
 );

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle, CheckCircle, DollarSign, Receipt, User, Calendar, FileText } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, DollarSign, Receipt, User, Calendar, FileText, ClipboardCheck } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
 import { leaseTerminationService } from '../../services/leaseTerminationService';
+import InspectionForm from './InspectionForm';
 
 // Define interfaces locally to avoid import issues
 interface LeaseTerminationData {
@@ -65,6 +66,9 @@ interface FinalSettlement {
 
 interface LeaseTerminationFormProps {
   leaseId: string;
+  roomId: string;
+  facilityId: string;
+  renterId: string;
   renterName: string;
   roomNumber: string;
   facilityName: string;
@@ -74,6 +78,9 @@ interface LeaseTerminationFormProps {
 
 const LeaseTerminationForm: React.FC<LeaseTerminationFormProps> = ({
   leaseId,
+  roomId,
+  facilityId,
+  renterId,
   renterName,
   roomNumber,
   facilityName,
@@ -82,6 +89,7 @@ const LeaseTerminationForm: React.FC<LeaseTerminationFormProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [showInspection, setShowInspection] = useState(false);
   const [terminationData, setTerminationData] = useState<LeaseTerminationData | null>(null);
   const [calculationResult, setCalculationResult] = useState<any>(null);
   
@@ -323,6 +331,30 @@ const LeaseTerminationForm: React.FC<LeaseTerminationFormProps> = ({
                 onChange={(e) => handleInputChange('terminationNotes', e.target.value)}
                 placeholder="Additional notes about the termination..."
               />
+            </div>
+          </Card>
+
+          {/* Post-Inspection Prompt */}
+          <Card className="border-blue-500/50 bg-blue-500/10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-start space-x-3">
+                <ClipboardCheck className="w-6 h-6 text-blue-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-blue-400 font-medium">Post-Inspection Required</h4>
+                  <p className="text-blue-300 text-sm mt-1">
+                    A post-inspection documents the room's condition at move-out. Inspection costs are automatically deducted from the deposit refund.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowInspection(true)}
+                className="ml-4 flex-shrink-0"
+              >
+                <ClipboardCheck className="w-4 h-4 mr-2" />
+                Start Inspection
+              </Button>
             </div>
           </Card>
 
@@ -605,6 +637,19 @@ const LeaseTerminationForm: React.FC<LeaseTerminationFormProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Post-Inspection Modal */}
+      {showInspection && (
+        <InspectionForm
+          leaseId={leaseId}
+          facilityId={facilityId}
+          roomId={roomId}
+          renterId={renterId}
+          inspectionType="post"
+          onSuccess={() => setShowInspection(false)}
+          onCancel={() => setShowInspection(false)}
+        />
+      )}
     </div>
   );
 };

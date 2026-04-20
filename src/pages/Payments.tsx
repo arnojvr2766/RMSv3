@@ -13,6 +13,7 @@ import {
   Eye,
   Edit,
   Download,
+  Printer,
   RefreshCw,
   ChevronDown,
   ChevronUp,
@@ -23,6 +24,8 @@ import {
   Shield
 } from 'lucide-react';
 import { useRole } from '../contexts/RoleContext';
+import { useToast } from '../contexts/ToastContext';
+import { PageLoader } from '../components/ui/SkeletonLoader';
 import { useOrganizationSettings } from '../contexts/OrganizationSettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -41,6 +44,7 @@ import Input from '../components/ui/Input';
 import PaymentCapture from '../components/forms/PaymentCapture';
 import PaymentEdit from '../components/forms/PaymentEdit';
 import QuickPaymentCapture from '../components/forms/QuickPaymentCapture';
+import PaymentReceiptModal from '../components/forms/PaymentReceiptModal';
 
 // Interfaces
 interface Facility {
@@ -165,6 +169,7 @@ interface PaymentTransaction {
 
 const Payments: React.FC = () => {
   const { currentRole, isSystemAdmin } = useRole();
+  const { showSuccess, showError } = useToast();
   const { allowStandardUserPayments } = useOrganizationSettings();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -195,6 +200,9 @@ const Payments: React.FC = () => {
   const [editingPayment, setEditingPayment] = useState<PaymentTransaction | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string>('');
   
+  // Statement / receipt for historical payments
+  const [statementData, setStatementData] = useState<any | null>(null);
+
   // Payment approval state
   const [pendingApprovals, setPendingApprovals] = useState<PaymentApproval[]>([]);
   const [showApprovals, setShowApprovals] = useState(false);
@@ -209,16 +217,6 @@ const Payments: React.FC = () => {
   // System admins have full access, standard users have controlled access
   const canManagePayments = isSystemAdmin || allowStandardUserPayments;
   
-  // Debug logging for permissions
-  console.log('🔍 Payment Permissions Debug:', {
-    currentRole,
-    isSystemAdmin,
-    allowStandardUserPayments,
-    canManagePayments,
-    userEmail: user?.email
-  });
-  
-
   // Load all data
   useEffect(() => {
     loadData();
@@ -373,8 +371,16 @@ const Payments: React.FC = () => {
         const renter = renterMap.get(lease.renterId);
         
         schedule.payments.forEach(payment => {
-          // Only process payments for the months we want to load
-          if (!monthsToLoad.has(payment.month)) {
+          // Match by payment month (strip -deposit suffix for deposits) OR by paidDate falling in range
+          const baseMonth = payment.month.replace(/-deposit$/, '');
+          const inMonthRange = monthsToLoad.has(payment.month) || monthsToLoad.has(baseMonth);
+          const inPaidDateRange = (() => {
+            if (!payment.paidDate) return false;
+            const pd = payment.paidDate.toDate ? payment.paidDate.toDate() : new Date(payment.paidDate);
+            const pdKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+            return monthsToLoad.has(pdKey);
+          })();
+          if (!inMonthRange && !inPaidDateRange) {
             return;
           }
           
@@ -666,6 +672,28 @@ const Payments: React.FC = () => {
     setShowPaymentEdit(true);
   };
 
+  const handlePrintStatement = async (transaction: PaymentTransaction) => {
+    const scheduleId = transaction.id.split('_')[0];
+    const schedule = await paymentScheduleService.getPaymentScheduleByLease(transaction.leaseId!);
+    const facility = facilities.find(f => f.id === transaction.facilityId);
+    setStatementData({
+      amount: transaction.paidAmount || transaction.amount,
+      method: transaction.paymentMethod || 'cash',
+      date: transaction.paidDate
+        ? (transaction.paidDate.toDate ? transaction.paidDate.toDate() : new Date(transaction.paidDate))
+            .toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+      month: transaction.month,
+      paymentSchedule: schedule,
+      renterName: transaction.renterName,
+      roomNumber: transaction.roomNumber,
+      facilityName: facility?.name || transaction.facilityName,
+      penaltyPaid: 0,
+      penaltyMethod: 'cash',
+      leaseId: transaction.leaseId || scheduleId,
+    });
+  };
+
   const handlePaymentSuccess = () => {
     setShowQuickPaymentCapture(false);
     setShowPaymentEdit(false);
@@ -686,7 +714,7 @@ const Payments: React.FC = () => {
       await loadData();
     } catch (error) {
       console.error('Error checking overdue payments:', error);
-      alert('Failed to check overdue payments. Please try again.');
+      showError('Failed to check overdue payments. Please try again.');
     }
   };
 
@@ -709,18 +737,18 @@ const Payments: React.FC = () => {
     try {
       const approvalNotes = prompt('Add approval notes (optional):');
       await paymentApprovalService.approvePayment(
-        paymentScheduleId, 
-        month, 
-        'current_user_id', // TODO: Get from auth context
+        paymentScheduleId,
+        month,
+        user?.uid || '',
         approvalNotes || undefined
       );
       
-      alert('Payment approved successfully!');
+      showSuccess('Payment approved successfully!');
       await loadApprovalData(); // Reload approval data
       await loadData(); // Reload payment transactions
     } catch (error) {
       console.error('Error approving payment:', error);
-      alert('Failed to approve payment. Please try again.');
+      showError('Failed to approve payment. Please try again.');
     }
   };
 
@@ -728,23 +756,23 @@ const Payments: React.FC = () => {
     try {
       const rejectionNotes = prompt('Add rejection notes (required):');
       if (!rejectionNotes?.trim()) {
-        alert('Rejection notes are required.');
+        showError('Rejection notes are required.');
         return;
       }
-      
+
       await paymentApprovalService.rejectPayment(
-        paymentScheduleId, 
-        month, 
-        'current_user_id', // TODO: Get from auth context
+        paymentScheduleId,
+        month,
+        user?.uid || '',
         rejectionNotes
       );
-      
-      alert('Payment rejected successfully!');
+
+      showSuccess('Payment rejected successfully!');
       await loadApprovalData(); // Reload approval data
       await loadData(); // Reload payment transactions
     } catch (error) {
       console.error('Error rejecting payment:', error);
-      alert('Failed to reject payment. Please try again.');
+      showError('Failed to reject payment. Please try again.');
     }
   };
 
@@ -783,11 +811,8 @@ const Payments: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-secondary-900 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-primary-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading payment data...</p>
-        </div>
+      <div className="min-h-screen bg-secondary-900 p-6">
+        <PageLoader variant="table" />
       </div>
     );
   }
@@ -1513,6 +1538,18 @@ const Payments: React.FC = () => {
                               <Edit className="w-4 h-4" />
                             </Button>
                           )}
+
+                          {/* Print Statement button - for paid payments */}
+                          {transaction.status === 'paid' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handlePrintStatement(transaction)}
+                              title="Print Statement"
+                            >
+                              <Printer className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1766,6 +1803,24 @@ const Payments: React.FC = () => {
               />
             </div>
           </div>
+        )}
+
+        {/* Statement modal for historical payments */}
+        {statementData && (
+          <PaymentReceiptModal
+            amount={statementData.amount}
+            paymentMethod={statementData.method}
+            paymentDate={statementData.date}
+            monthCovered={statementData.month}
+            leaseId={statementData.leaseId}
+            paymentSchedule={statementData.paymentSchedule}
+            renterName={statementData.renterName}
+            roomNumber={statementData.roomNumber}
+            facilityName={statementData.facilityName}
+            penaltyPaid={statementData.penaltyPaid}
+            penaltyMethod={statementData.penaltyMethod}
+            onClose={() => setStatementData(null)}
+          />
         )}
       </div>
     </div>

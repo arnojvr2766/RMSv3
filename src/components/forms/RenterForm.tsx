@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
 import { renterService } from '../../services/firebaseService';
+import { isValidEmail, EMAIL_ERROR } from '../../utils/emailValidation';
 import { Timestamp } from 'firebase/firestore';
 
 interface RenterFormProps {
@@ -79,8 +80,8 @@ const RenterForm: React.FC<RenterFormProps> = ({ renter, onClose, onSuccess }) =
     }
     
     // Optional field validation (only if field has content)
-    if (formData.email.trim() && !/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+    if (formData.email.trim() && !isValidEmail(formData.email)) {
+      newErrors.email = EMAIL_ERROR;
     }
     if (formData.monthlyIncome < 0) {
       newErrors.monthlyIncome = 'Monthly income cannot be negative';
@@ -192,6 +193,12 @@ const RenterForm: React.FC<RenterFormProps> = ({ renter, onClose, onSuccess }) =
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
+                  onBlur={() => {
+                    if (formData.email.trim() && !isValidEmail(formData.email))
+                      setErrors(prev => ({ ...prev, email: EMAIL_ERROR }));
+                    else
+                      setErrors(prev => ({ ...prev, email: '' }));
+                  }}
                   error={errors.email}
                 />
                 <Input

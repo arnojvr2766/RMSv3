@@ -39,11 +39,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       const result = await signInWithEmailAndPassword(auth, formData.email, formData.password);
       console.log('Login successful:', result.user);
       onLoginSuccess();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
       let errorMessage = 'Login failed. Please try again.';
       
-      switch (error.code) {
+      if (error && typeof error === 'object' && 'code' in error) {
+        switch ((error as { code: string }).code) {
         case 'auth/invalid-email':
           errorMessage = 'Please enter a valid email address.';
           break;
@@ -59,6 +60,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         case 'auth/user-disabled':
           errorMessage = 'This account has been disabled. Please contact your administrator.';
           break;
+        }
       }
       
       setError(errorMessage);
@@ -133,7 +135,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </div>
                 <div>
                   <h1 className="text-4xl font-bold text-white">RentDesk</h1>
-                  <p className="text-gray-400 text-xs">Version 3.0</p>
+                  <p className="text-gray-400 text-xs">Version 3.3.9</p>
                 </div>
               </div>
               

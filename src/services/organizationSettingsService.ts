@@ -15,6 +15,7 @@ export interface OrganizationSettings {
   allowStandardUserPastPayments: boolean;
   requireAdminApprovalForPastPayments: boolean;
   maxPastPaymentDays: number;
+  allowPartialPayments: boolean;
   
   // User Permissions
   allowStandardUserFacilities: boolean;
@@ -28,6 +29,7 @@ export interface OrganizationSettings {
   // Business Rules
   defaultLateFee: number;
   defaultChildSurcharge: number;
+  autoLockAfterDays: number; // Days after due date before auto-locking a room for non-payment
   
   // Metadata
   createdAt: Timestamp;
@@ -49,6 +51,7 @@ class OrganizationSettingsService {
       allowStandardUserPastPayments: false,
       requireAdminApprovalForPastPayments: true,
       maxPastPaymentDays: 30,
+      allowPartialPayments: false, // Default: one payment per month per room
       
       // User Permissions
       allowStandardUserFacilities: false,
@@ -62,6 +65,7 @@ class OrganizationSettingsService {
       // Business Rules
       defaultLateFee: 50,
       defaultChildSurcharge: 10,
+      autoLockAfterDays: 5, // Auto-lock rooms 5 days after the 1st of the month if no payment
       
       // Metadata
       createdAt: serverTimestamp() as Timestamp,

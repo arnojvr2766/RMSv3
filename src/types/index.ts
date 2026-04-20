@@ -32,7 +32,20 @@ export interface Room {
   monthlyRent: number;
   depositAmount: number;
   amenities: string[];
-  status: 'available' | 'occupied' | 'maintenance' | 'unavailable';
+  status: 'available' | 'occupied' | 'maintenance' | 'unavailable' | 'locked' | 'empty';
+  lastOccupancyState?: 'locked' | 'empty';
+  lastMonthStatus?: 'available' | 'occupied' | 'maintenance' | 'unavailable' | 'locked' | 'empty';
+  description?: string;
+  floorLevel?: number;
+  squareMeters?: number;
+  businessRules?: {
+    lateFeeAmount: number;
+    lateFeeStartDay: number;
+    childSurcharge: number;
+    gracePeriodDays: number;
+    paymentMethods: string[];
+    usesFacilityDefaults: boolean;
+  };
   createdAt: Date;
   updatedAt: Date;
 }

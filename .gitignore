@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+
+# Service account keys — NEVER commit these
+scripts/serviceAccountKey.json
+**/serviceAccountKey.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

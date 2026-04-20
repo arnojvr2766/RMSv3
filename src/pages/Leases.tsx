@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Building2, DoorClosed, User, Calendar, DollarSign, Filter, Search, Eye, CreditCard, Grid3X3, List } from 'lucide-react';
+import { FileText, Building2, DoorClosed, User, Calendar, DollarSign, Filter, Search, Eye, CreditCard, Grid3X3, List, ClipboardCheck, TrendingUp } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { leaseService, facilityService, renterService, roomService } from '../services/firebaseService';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import LeaseView from '../components/forms/LeaseView';
+import { TableSkeleton } from '../components/ui/SkeletonLoader';
 import LeaseTerminationForm from '../components/forms/LeaseTerminationForm';
+import RentIncreaseForm from '../components/forms/RentIncreaseForm';
 import PaymentCapture from '../components/forms/PaymentCapture';
+import InspectionForm from '../components/forms/InspectionForm';
 import { Timestamp } from 'firebase/firestore';
 
 // Temporary inline type definitions
@@ -70,6 +73,9 @@ const Leases: React.FC = () => {
   const [showLeaseView, setShowLeaseView] = useState(false);
   const [showPaymentCapture, setShowPaymentCapture] = useState(false);
   const [showLeaseTermination, setShowLeaseTermination] = useState(false);
+  const [showInspection, setShowInspection] = useState(false);
+  const [inspectionType, setInspectionType] = useState<'pre' | 'post'>('pre');
+  const [showRentIncrease, setShowRentIncrease] = useState(false);
   const [filterFacility, setFilterFacility] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,6 +108,10 @@ const Leases: React.FC = () => {
       setRooms(roomsData);
     } catch (error) {
       console.error('Error loading leases data:', error);
+      setLeases([]);
+      setFacilities([]);
+      setRenters([]);
+      setRooms([]);
     } finally {
       setIsLoading(false);
     }
@@ -120,6 +130,13 @@ const Leases: React.FC = () => {
   const handleTerminateLease = () => {
     setShowLeaseView(false);
     setShowLeaseTermination(true);
+  };
+
+  const handleStartInspection = (lease: LeaseAgreement, type: 'pre' | 'post') => {
+    setSelectedLease(lease);
+    setInspectionType(type);
+    setShowLeaseView(false);
+    setShowInspection(true);
   };
 
   const formatDate = (date: any) => {
@@ -174,9 +191,8 @@ const Leases: React.FC = () => {
               <p className="text-gray-400">Manage lease agreements, view active contracts, track lease terms</p>
             </div>
           </div>
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto"></div>
-            <p className="text-gray-400 mt-4">Loading leases...</p>
+          <div className="py-4">
+            <TableSkeleton rows={7} cols={5} />
           </div>
         </div>
       </div>
@@ -382,15 +398,31 @@ const Leases: React.FC = () => {
                       <Eye className="w-4 h-4 mr-2" />
                       View Details
                     </Button>
-                    <Button 
-                      variant="accent" 
-                      size="sm" 
+                    <Button
+                      variant="accent"
+                      size="sm"
                       onClick={() => handleCapturePayment(lease)}
                       className="flex-1"
                     >
                       <CreditCard className="w-4 h-4 mr-2" />
                       Payments
                     </Button>
+                    {lease.status === 'active' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleStartInspection(lease, 'post')}
+                        title="Room Inspection"
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        <ClipboardCheck className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {lease.status === 'active' && (
+                      <Button variant="ghost" size="sm" onClick={() => { setSelectedLease(lease); setShowRentIncrease(true); }} title="Update Rent">
+                        <TrendingUp className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -461,14 +493,30 @@ const Leases: React.FC = () => {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="primary" 
+                          <Button
+                            variant="primary"
                             size="sm"
                             onClick={() => handleCapturePayment(lease)}
                             title="Capture Payment"
                           >
                             <CreditCard className="w-4 h-4" />
                           </Button>
+                          {lease.status === 'active' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartInspection(lease, 'post')}
+                              title="Room Inspection"
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              <ClipboardCheck className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {lease.status === 'active' && (
+                            <Button variant="ghost" size="sm" onClick={() => { setSelectedLease(lease); setShowRentIncrease(true); }} title="Update Rent">
+                              <TrendingUp className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -520,13 +568,35 @@ const Leases: React.FC = () => {
           </div>
         )}
 
+        {/* Inspection Modal */}
+        {showInspection && selectedLease && (
+          <InspectionForm
+            leaseId={selectedLease.id!}
+            facilityId={selectedLease.facilityId}
+            roomId={selectedLease.roomId}
+            renterId={selectedLease.renterId}
+            inspectionType={inspectionType}
+            onSuccess={() => {
+              setShowInspection(false);
+              setSelectedLease(null);
+            }}
+            onCancel={() => {
+              setShowInspection(false);
+              setSelectedLease(null);
+            }}
+          />
+        )}
+
         {/* Lease Termination Modal */}
         {showLeaseTermination && selectedLease && (
           <LeaseTerminationForm
             leaseId={selectedLease.id!}
-            renterName={`${selectedLease.renter?.personalInfo?.firstName || ''} ${selectedLease.renter?.personalInfo?.lastName || ''}`}
-            roomNumber={selectedLease.room?.roomNumber || 'Unknown'}
-            facilityName={selectedLease.facility?.name || 'Unknown'}
+            roomId={selectedLease.roomId}
+            facilityId={selectedLease.facilityId}
+            renterId={selectedLease.renterId}
+            renterName={getRenterName(selectedLease.renterId)}
+            roomNumber={getRoomNumber(selectedLease.roomId)}
+            facilityName={getFacilityName(selectedLease.facilityId)}
             onSuccess={() => {
               setShowLeaseTermination(false);
               setSelectedLease(null);
@@ -537,6 +607,20 @@ const Leases: React.FC = () => {
               setShowLeaseTermination(false);
             }}
           />
+        )}
+
+        {/* Rent Increase Modal */}
+        {showRentIncrease && selectedLease && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <RentIncreaseForm
+              leaseId={selectedLease.id!}
+              currentRent={selectedLease.terms.monthlyRent}
+              roomNumber={getRoomNumber(selectedLease.roomId)}
+              renterName={getRenterName(selectedLease.renterId)}
+              onSuccess={() => { setShowRentIncrease(false); setSelectedLease(null); loadData(); }}
+              onCancel={() => setShowRentIncrease(false)}
+            />
+          </div>
         )}
 
       </div>

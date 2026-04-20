@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
-import { UserService } from '../services/userService';
 
 export type UserRole = 'system_admin' | 'standard_user';
 
@@ -28,21 +29,17 @@ export const RoleProvider: React.FC<RoleProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const loadUserRole = async () => {
-      if (user?.email) {
+      if (user?.uid) {
         try {
-          console.log('🔍 Loading user role for:', user.email);
-          const userData = await UserService.getUserByEmail(user.email);
-          console.log('🔍 User data from Firestore:', userData);
-          if (userData) {
-            console.log('🔍 Setting role to:', userData.role);
-            setCurrentRole(userData.role);
+          const snap = await getDoc(doc(db, 'users', user.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            setCurrentRole(data.role === 'system_admin' ? 'system_admin' : 'standard_user');
           } else {
-            console.log('🔍 No user data found, defaulting to standard_user');
             setCurrentRole('standard_user');
           }
         } catch (error) {
           console.error('Error loading user role:', error);
-          // Default to standard_user if there's an error
           setCurrentRole('standard_user');
         }
       } else {

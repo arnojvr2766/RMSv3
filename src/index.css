@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/mobile-safe-areas.css";
 
 @theme {
   --color-primary-50: #fffef0;
@@ -124,5 +125,15 @@
   input:-webkit-autofill:active {
     -webkit-box-shadow: 0 0 0 30px #374151 inset !important;
     -webkit-text-fill-color: #ffffff !important;
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
   }
 }

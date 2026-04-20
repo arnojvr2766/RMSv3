@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  CreditCard, 
-  Building2, 
-  HouseHeart, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  CreditCard,
+  Building2,
+  HouseHeart,
   DoorClosed,
-  Users, 
+  Users,
+  Bell,
   FileText,
-  AlertTriangle, 
-  MessageSquare, 
-  Menu,
-  X,
+  AlertTriangle,
+  MessageSquare,
+  Wrench,
+  BarChart3,
+  GraduationCap,
   Clock,
-  Wrench
 } from 'lucide-react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useRole } from '../../contexts/RoleContext';
 import { useSettings } from '../../contexts/SettingsContext';
 
@@ -31,6 +34,7 @@ interface MenuItem {
   path: string;
   roles: string[];
   description: string;
+  badgeKey?: string; // which badge count to show
 }
 
 const menuItems: MenuItem[] = [
@@ -40,7 +44,7 @@ const menuItems: MenuItem[] = [
     icon: HouseHeart,
     path: '/dashboard',
     roles: ['system_admin', 'standard_user'],
-    description: 'Return to the main dashboard and overview'
+    description: 'Return to the main dashboard and overview',
   },
   {
     id: 'payments',
@@ -48,7 +52,8 @@ const menuItems: MenuItem[] = [
     icon: CreditCard,
     path: '/payments',
     roles: ['system_admin', 'standard_user'],
-    description: 'Capture payments, view payment history, manage outstanding payments'
+    description: 'Capture payments, view payment history, manage outstanding payments',
+    badgeKey: 'overdue',
   },
   {
     id: 'facilities',
@@ -56,7 +61,7 @@ const menuItems: MenuItem[] = [
     icon: Building2,
     path: '/facilities',
     roles: ['system_admin', 'standard_user'],
-    description: 'Manage facilities, add rooms, view occupancy rates and facility status'
+    description: 'Manage facilities, add rooms, view occupancy rates and facility status',
   },
   {
     id: 'rooms',
@@ -64,7 +69,7 @@ const menuItems: MenuItem[] = [
     icon: DoorClosed,
     path: '/rooms',
     roles: ['system_admin', 'standard_user'],
-    description: 'Manage individual rooms, view room status, occupancy details'
+    description: 'Manage individual rooms, view room status, occupancy details',
   },
   {
     id: 'renters',
@@ -72,7 +77,7 @@ const menuItems: MenuItem[] = [
     icon: Users,
     path: '/renters',
     roles: ['system_admin', 'standard_user'],
-    description: 'Manage tenants, store documents, track renter information'
+    description: 'Manage tenants, store documents, track renter information',
   },
   {
     id: 'leases',
@@ -80,7 +85,7 @@ const menuItems: MenuItem[] = [
     icon: FileText,
     path: '/leases',
     roles: ['system_admin', 'standard_user'],
-    description: 'Manage lease agreements, view active contracts, track lease terms'
+    description: 'Manage lease agreements, view active contracts, track lease terms',
   },
   {
     id: 'payment-approvals',
@@ -88,7 +93,17 @@ const menuItems: MenuItem[] = [
     icon: Clock,
     path: '/payment-approvals',
     roles: ['system_admin'],
-    description: 'Review and approve payment changes made by standard users'
+    description: 'Review and approve payment changes made by standard users',
+    badgeKey: 'approvals',
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    path: '/notifications',
+    roles: ['system_admin', 'standard_user'],
+    description: 'View and manage your notifications',
+    badgeKey: 'notifications',
   },
   {
     id: 'maintenance',
@@ -96,7 +111,7 @@ const menuItems: MenuItem[] = [
     icon: Wrench,
     path: '/maintenance',
     roles: ['system_admin', 'standard_user'],
-    description: 'Track maintenance expenses, split costs across rooms, manage recovery'
+    description: 'Track maintenance expenses, split costs across rooms, manage recovery',
   },
   {
     id: 'penalties',
@@ -104,7 +119,7 @@ const menuItems: MenuItem[] = [
     icon: AlertTriangle,
     path: '/penalties',
     roles: ['system_admin', 'standard_user'],
-    description: 'Manage late payment penalties, disputes, and penalty tracking'
+    description: 'Manage late payment penalties, disputes, and penalty tracking',
   },
   {
     id: 'complaints',
@@ -112,127 +127,179 @@ const menuItems: MenuItem[] = [
     icon: MessageSquare,
     path: '/complaints',
     roles: ['system_admin', 'standard_user'],
-    description: 'Capture complaints, track resolution status, manage tenant issues'
-  }
+    description: 'Capture complaints, track resolution status, manage tenant issues',
+    badgeKey: 'openComplaints',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: BarChart3,
+    path: '/reports',
+    roles: ['system_admin'],
+    description: 'Monthly income, occupancy rates, overdue accounts, deposit liability',
+  },
+  {
+    id: 'training',
+    label: 'Training',
+    icon: GraduationCap,
+    path: '/training',
+    roles: ['system_admin', 'standard_user'],
+    description: 'Courses, certifications, and how-to reference guides for using RentDesk',
+  },
 ];
 
+interface Badges {
+  approvals: number;
+  overdue: number;
+  openComplaints: number;
+  notifications: number;
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
-  const { currentRole } = useRole();
+  const { currentRole, isSystemAdmin } = useRole();
   const { allowStandardUserFacilities, allowStandardUserRooms } = useSettings();
   const location = useLocation();
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [badges, setBadges] = useState<Badges>({ approvals: 0, overdue: 0, openComplaints: 0, notifications: 0 });
+
+  // Load badge counts
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const results = await Promise.allSettled([
+          // Pending approvals
+          isSystemAdmin
+            ? getDocs(query(collection(db, 'payment_approvals'), where('status', '==', 'pending')))
+            : Promise.resolve(null),
+          // Open complaints
+          getDocs(query(collection(db, 'complaints'), where('status', '==', 'open'))),
+          // Overdue payments — count payment schedules with overdue months
+          getDocs(query(collection(db, 'payment_schedules'))),
+          // Unread notifications
+          getDocs(query(collection(db, 'notifications'), where('read', '==', false))),
+        ]);
+
+        if (cancelled) return;
+
+        const approvalsSnap = results[0].status === 'fulfilled' ? results[0].value : null;
+        const complaintsSnap = results[1].status === 'fulfilled' ? results[1].value : null;
+        const schedulesSnap = results[2].status === 'fulfilled' ? results[2].value : null;
+        const notifSnap = results[3].status === 'fulfilled' ? results[3].value : null;
+
+        let overdue = 0;
+        schedulesSnap?.docs.forEach(d => {
+          const data = d.data();
+          if (Array.isArray(data.payments)) {
+            overdue += data.payments.filter((p: any) => p.status === 'overdue').length;
+          }
+        });
+
+        setBadges({
+          approvals: approvalsSnap?.size ?? 0,
+          overdue,
+          openComplaints: complaintsSnap?.size ?? 0,
+          notifications: notifSnap?.size ?? 0,
+        });
+      } catch {
+        // silently fail — badges are non-critical
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [isSystemAdmin, location.pathname]); // re-check whenever route changes
 
   const filteredMenuItems = menuItems.filter(item => {
-    // System admin can access everything
     if (currentRole === 'system_admin') return true;
-    
-    // Standard user permissions based on settings
     if (currentRole === 'standard_user') {
       if (item.id === 'facilities') return allowStandardUserFacilities;
       if (item.id === 'rooms') return allowStandardUserRooms;
-      // Other items are always available to standard users
-      return true;
+      return item.roles.includes('standard_user');
     }
-    
-    // Default role-based filtering
     return item.roles.includes(currentRole);
   });
 
-  const handleItemClick = (itemId: string) => {
-    setExpandedItem(expandedItem === itemId ? null : itemId);
+  const handleNavClick = () => {
+    // Close sidebar on mobile after navigation
+    const isMobile = window.innerWidth < 1024;
+    if (isMobile && isOpen) onToggle();
+  };
+
+  const getBadgeCount = (key?: string): number => {
+    if (!key) return 0;
+    return (badges as any)[key] ?? 0;
   };
 
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* Mobile overlay */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-          onClick={onToggle}
-        />
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onToggle} />
       )}
 
       {/* Sidebar */}
       <div className={`
-        fixed top-0 left-0 h-screen bg-gray-800 border-r border-gray-700 z-50 transition-all duration-300 ease-in-out
-        ${isOpen ? 'w-80' : 'w-0'}
-        lg:relative lg:z-auto lg:w-16 lg:transition-all lg:duration-300 lg:ease-in-out
-        ${isOpen ? 'lg:w-80' : 'lg:w-16'}
+        fixed top-0 left-0 h-screen bg-gray-800 border-r border-gray-700 z-50 transition-all duration-300 ease-in-out flex flex-col
+        ${isOpen ? 'w-72' : 'w-0'}
+        lg:relative lg:z-auto lg:w-16
+        ${isOpen ? 'lg:w-72' : 'lg:w-16'}
       `}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          {isOpen && (
-            <div className="flex items-center space-x-3">
-              <img 
-                src="/RentDesk.png" 
-                alt="RentDesk Logo" 
-                className="w-8 h-8 rounded-lg"
-              />
-              <div>
-                <span className="text-white font-semibold text-lg">RentDesk</span>
-              </div>
+        <div className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
+          {isOpen ? (
+            <div className="flex items-center gap-3">
+              <img src="/RentDesk.png" alt="RentDesk" className="w-8 h-8 rounded-lg" />
+              <span className="text-white font-semibold text-lg">RentDesk</span>
             </div>
-          )}
-          
-          {!isOpen && (
+          ) : (
             <div className="flex justify-center w-full">
-              <img 
-                src="/RentDesk.png" 
-                alt="RentDesk Logo" 
-                className="w-8 h-8 rounded-lg"
-              />
+              <img src="/RentDesk.png" alt="RentDesk" className="w-8 h-8 rounded-lg" />
             </div>
           )}
-          
-          <button
-            onClick={onToggle}
-            className="p-2 rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            {isOpen ? (
-              <ChevronLeft className="w-5 h-5 text-white" />
-            ) : (
-              <ChevronRight className="w-5 h-5 text-white" />
-            )}
+          <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-gray-700 transition-colors flex-shrink-0">
+            {isOpen ? <ChevronLeft className="w-5 h-5 text-white" /> : <ChevronRight className="w-5 h-5 text-white" />}
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4">
-          <div className="px-4 space-y-2">
+        <nav className="flex-1 overflow-y-auto py-3">
+          <div className="px-3 space-y-0.5">
             {filteredMenuItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
-              const isExpanded = expandedItem === item.id;
-              
+              const badgeCount = getBadgeCount(item.badgeKey);
+
               return (
-                <div key={item.id}>
-                  <Link
-                    to={item.path}
-                    onClick={() => handleItemClick(item.id)}
-                    className={`
-                      w-full flex items-center ${isOpen ? 'p-3' : 'p-2'} rounded-lg transition-all duration-200
-                      ${isActive 
-                        ? 'bg-primary-500 text-secondary-900' 
-                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                      }
-                    `}
-                  >
-                    <Icon className={`${isOpen ? 'w-5 h-5 mr-3' : 'w-14 h-14 mx-auto'}`} />
-                    {isOpen && (
-                      <>
-                        <span className="font-medium">{item.label}</span>
-                        <ChevronRight className={`w-4 h-4 ml-auto transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                      </>
+                <Link
+                  key={item.id}
+                  to={item.path}
+                  onClick={handleNavClick}
+                  title={!isOpen ? item.label : undefined}
+                  className={`
+                    relative flex items-center gap-3 rounded-lg transition-all duration-150
+                    ${isOpen ? 'px-3 py-2.5' : 'px-2 py-2.5 justify-center'}
+                    ${isActive
+                      ? 'bg-yellow-500 text-gray-900'
+                      : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                    }
+                  `}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Icon className="w-5 h-5" />
+                    {badgeCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                        {badgeCount > 99 ? '99+' : badgeCount}
+                      </span>
                     )}
-                  </Link>
-                  
-                  {/* Expanded Description */}
-                  {isOpen && isExpanded && (
-                    <div className="mt-2 px-3 py-2 bg-gray-700 rounded-lg">
-                      <p className="text-sm text-gray-300">{item.description}</p>
-                    </div>
+                  </div>
+                  {isOpen && (
+                    <span className="text-sm font-medium truncate">{item.label}</span>
                   )}
-                </div>
+                  {isOpen && badgeCount > 0 && (
+                    <span className="ml-auto flex-shrink-0 min-w-[20px] h-5 px-1 bg-red-500/20 text-red-400 text-xs font-semibold rounded-full flex items-center justify-center">
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
+                </Link>
               );
             })}
           </div>
@@ -240,11 +307,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 
         {/* Footer */}
         {isOpen && (
-          <div className="p-4 border-t border-gray-700">
-            <div className="text-xs text-gray-400 text-center">
-              <p>Rental Management System</p>
-              <p>Version 3.0</p>
-            </div>
+          <div className="p-4 border-t border-gray-700 flex-shrink-0">
+            <p className="text-xs text-gray-500 text-center">RentDesk v3.0</p>
           </div>
         )}
       </div>

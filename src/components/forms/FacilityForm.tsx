@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Card from '../ui/Card';
 import { facilityService } from '../../services/firebaseService';
+import { isValidEmail, EMAIL_ERROR } from '../../utils/emailValidation';
 
 // Temporary inline type definition to isolate the issue
 interface Facility {
@@ -47,6 +48,8 @@ const FacilityForm: React.FC<FacilityFormProps> = ({
     billingEntity: facility?.billingEntity || '',
     phone: facility?.contactInfo?.phone || '',
     email: facility?.contactInfo?.email || '',
+    defaultMonthlyRent: (facility as any)?.defaultBusinessRules?.defaultMonthlyRent || 0,
+    defaultDepositAmount: (facility as any)?.defaultBusinessRules?.defaultDepositAmount || 0,
     lateFeeAmount: facility?.defaultBusinessRules?.lateFeeAmount || (facility as any)?.settings?.lateFeeAmount || 20,
     lateFeeStartDay: facility?.defaultBusinessRules?.lateFeeStartDay || (facility as any)?.settings?.lateFeeStartDay || 4,
     childSurcharge: facility?.defaultBusinessRules?.childSurcharge || (facility as any)?.settings?.childSurcharge || 10,
@@ -78,8 +81,8 @@ const FacilityForm: React.FC<FacilityFormProps> = ({
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+    } else if (!isValidEmail(formData.email)) {
+      newErrors.email = EMAIL_ERROR;
     }
 
     if (formData.lateFeeAmount < 0) {
@@ -121,6 +124,8 @@ const FacilityForm: React.FC<FacilityFormProps> = ({
           email: formData.email.trim(),
         },
         defaultBusinessRules: {
+          defaultMonthlyRent: formData.defaultMonthlyRent,
+          defaultDepositAmount: formData.defaultDepositAmount,
           lateFeeAmount: formData.lateFeeAmount,
           lateFeeStartDay: formData.lateFeeStartDay,
           childSurcharge: formData.childSurcharge,
@@ -214,6 +219,12 @@ const FacilityForm: React.FC<FacilityFormProps> = ({
               type="email"
               value={formData.email}
               onChange={(e) => handleInputChange('email', e.target.value)}
+              onBlur={() => {
+                if (formData.email.trim() && !isValidEmail(formData.email))
+                  setErrors(prev => ({ ...prev, email: EMAIL_ERROR }));
+                else
+                  setErrors(prev => ({ ...prev, email: '' }));
+              }}
               error={errors.email}
               required
               placeholder="Enter email address"
@@ -230,6 +241,26 @@ const FacilityForm: React.FC<FacilityFormProps> = ({
             These default rules will be inherited by all rooms in this facility but can be overridden per room.
           </p>
           
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Default Monthly Rent (R)"
+              type="number"
+              value={formData.defaultMonthlyRent}
+              onChange={(e) => handleInputChange('defaultMonthlyRent', Number(e.target.value))}
+              min="0"
+              placeholder="e.g. 1500"
+            />
+
+            <Input
+              label="Default Deposit Amount (R)"
+              type="number"
+              value={formData.defaultDepositAmount}
+              onChange={(e) => handleInputChange('defaultDepositAmount', Number(e.target.value))}
+              min="0"
+              placeholder="e.g. 1500"
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Late Fee Amount (R)"

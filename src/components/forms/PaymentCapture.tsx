@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, CheckCircle, X, Edit, Camera, Upload, Image, Trash2, AlertTriangle, ChevronUp, ChevronDown, Clock } from 'lucide-react';
+import { DollarSign, CheckCircle, X, Edit, Camera, Upload, Image, Trash2, AlertTriangle, Clock } from 'lucide-react';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
-import { paymentScheduleService, type PaymentSchedule } from '../../services/firebaseService';
+import { paymentScheduleService, roomService, renterService, facilityService, type PaymentSchedule } from '../../services/firebaseService';
 import { aggregatedPenaltyService } from '../../services/aggregatedPenaltyService';
 import PaymentEdit from './PaymentEdit';
 import CameraCapture from './CameraCapture';
-import PenaltyCalculator from './PenaltyCalculator';
+import PaymentReceiptModal from './PaymentReceiptModal';
 import { Timestamp } from 'firebase/firestore';
-import { usePaymentValidation } from '../../utils/paymentValidation';
+import { usePaymentValidation, validateOnePaymentPerMonth, validateDepositBeforeRent, validateOutstandingRent } from '../../utils/paymentValidation';
+import { useOrganizationSettings } from '../../contexts/OrganizationSettingsContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Temporary inline type definitions
 // PaymentSchedule type is imported from firebaseService
@@ -47,6 +50,11 @@ interface PaymentCaptureProps {
 
 const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCancel, preSelectedPayment }) => {
   const { validatePayment } = usePaymentValidation();
+  const { allowPartialPayments } = useOrganizationSettings();
+  const { showSuccess, showError } = useToast();
+  const { user } = useAuth();
+  const [roomNumber, setRoomNumber] = useState<string>('');
+  const [renterName, setRenterName] = useState<string>('');
   const [paymentSchedule, setPaymentSchedule] = useState<PaymentSchedule | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
@@ -60,7 +68,6 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
-  const [isPaymentSelectionExpanded, setIsPaymentSelectionExpanded] = useState(false);
   const [paymentValidation, setPaymentValidation] = useState<{ isValid: boolean; requiresApproval: boolean; errorMessage?: string } | null>(null);
   
   // Penalty payment state
@@ -68,9 +75,46 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   const [penaltyPaymentAmount, setPenaltyPaymentAmount] = useState(0);
   const [penaltyPaymentMethod, setPenaltyPaymentMethod] = useState('cash');
 
+  // Duplicate payment guard
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [bypassDuplicate, setBypassDuplicate] = useState(false);
+
+  // Inline form error (shown above submit button)
+  const [formError, setFormError] = useState<string | null>(null);
+  // File upload error (shown near upload button)
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const [facilityName, setFacilityName] = useState<string>('');
+  // Receipt modal state
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<{
+    amount: number;
+    method: string;
+    date: string;
+    month: string;
+    paymentSchedule: any;
+    renterName: string;
+    roomNumber: string;
+    facilityName: string;
+    penaltyPaid: number;
+    penaltyMethod: string;
+  } | null>(null);
+
   useEffect(() => {
     loadPaymentSchedule();
+    // Load room and renter info for display
+    roomService.getRoomById(lease.roomId).then(r => { if (r) setRoomNumber(r.roomNumber); }).catch(() => {});
+    renterService.getRenterById(lease.renterId).then(r => {
+      if (r) setRenterName(`${r.personalInfo.firstName} ${r.personalInfo.lastName}`);
+    }).catch(() => {});
+    facilityService.getFacilityById(lease.facilityId).then(f => { if (f) setFacilityName(f.name); }).catch(() => {});
   }, [lease]);
+
+  // Reset duplicate warning when selected payment changes
+  useEffect(() => {
+    setDuplicateWarning(null);
+    setBypassDuplicate(false);
+  }, [selectedPayment]);
 
   // Validate payment date whenever it changes
   useEffect(() => {
@@ -88,60 +132,49 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
       
       // Set default payment - use preSelectedPayment if provided, otherwise use smart default
       if (schedule) {
+        // Helper: amount still owed on a payment entry
+        const remaining = (p: typeof schedule.payments[0]) =>
+          p.status === 'partial' ? Math.max(0, p.amount - (p.paidAmount || 0)) : p.amount;
+
         if (preSelectedPayment) {
           // Use the pre-selected payment
           setSelectedPayment(preSelectedPayment.month);
-          setPaymentAmount(preSelectedPayment.amount);
+          setPaymentAmount(remaining(preSelectedPayment));
         } else {
-          // Find the last paid payment (by due date)
-          const paidPayments = schedule.payments.filter(p => p.status === 'paid' || p.status === 'partial');
-          let lastPaidPayment = null;
-          
-          if (paidPayments.length > 0) {
-            // Sort by due date to find the chronologically last paid payment
-            lastPaidPayment = paidPayments.sort((a, b) => {
-              const dateA = a.dueDate.toDate();
-              const dateB = b.dueDate.toDate();
-              return dateB.getTime() - dateA.getTime(); // Sort descending to get the latest
-            })[0];
-          }
-          
-          // Find the first payment due after the last paid payment
-          let defaultPayment = null;
-          
-          if (lastPaidPayment) {
-            // Find payments that are due after the last paid payment's due date
-            const paymentsAfterLastPaid = schedule.payments.filter(p => {
-              const paymentDueDate = p.dueDate.toDate();
-              const lastPaidDueDate = lastPaidPayment.dueDate.toDate();
-              return paymentDueDate > lastPaidDueDate && (p.status === 'pending' || p.status === 'overdue');
-            });
-            
-            if (paymentsAfterLastPaid.length > 0) {
-              // Sort by due date ascending to get the first one
-              defaultPayment = paymentsAfterLastPaid.sort((a, b) => {
-                const dateA = a.dueDate.toDate();
-                const dateB = b.dueDate.toDate();
-                return dateA.getTime() - dateB.getTime(); // Sort ascending to get the earliest
-              })[0];
-            }
+          // Priority 1: unpaid/partial deposit — must always be collected before rent
+          const unpaidDeposit = schedule.payments.find(
+            p => p.type === 'deposit' && (p.status === 'pending' || p.status === 'overdue' || p.status === 'partial')
+          );
+          if (unpaidDeposit) {
+            setSelectedPayment(unpaidDeposit.month);
+            setPaymentAmount(remaining(unpaidDeposit));
           } else {
-            // If no payments have been paid yet, find the first pending/overdue payment
-            const unpaidPayments = schedule.payments.filter(p => p.status === 'pending' || p.status === 'overdue');
-            if (unpaidPayments.length > 0) {
-              // Sort by due date ascending to get the earliest due payment
-              defaultPayment = unpaidPayments.sort((a, b) => {
-                const dateA = a.dueDate.toDate();
-                const dateB = b.dueDate.toDate();
-                return dateA.getTime() - dateB.getTime(); // Sort ascending to get the earliest
-              })[0];
+            // Priority 2: first pending/overdue/partial payment chronologically after the last fully paid one
+            const fullyPaid = schedule.payments.filter(p => p.status === 'paid');
+            const byDate = (a: typeof schedule.payments[0], b: typeof schedule.payments[0]) =>
+              a.dueDate.toDate().getTime() - b.dueDate.toDate().getTime();
+
+            let defaultPayment = null;
+
+            if (fullyPaid.length > 0) {
+              const lastPaidDate = fullyPaid
+                .sort((a, b) => b.dueDate.toDate().getTime() - a.dueDate.toDate().getTime())[0]
+                .dueDate.toDate();
+              const due = schedule.payments
+                .filter(p => p.dueDate.toDate() > lastPaidDate && (p.status === 'pending' || p.status === 'overdue' || p.status === 'partial'))
+                .sort(byDate);
+              defaultPayment = due[0] ?? null;
+            } else {
+              const due = schedule.payments
+                .filter(p => p.status === 'pending' || p.status === 'overdue' || p.status === 'partial')
+                .sort(byDate);
+              defaultPayment = due[0] ?? null;
             }
-          }
-          
-          // Set the default payment
-          if (defaultPayment) {
-            setSelectedPayment(defaultPayment.month);
-            setPaymentAmount(defaultPayment.amount);
+
+            if (defaultPayment) {
+              setSelectedPayment(defaultPayment.month);
+              setPaymentAmount(remaining(defaultPayment));
+            }
           }
         }
       }
@@ -159,8 +192,7 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
     return new Date(date).toLocaleDateString();
   };
 
-  const getMonthName = (monthKey: string) => {
-    // Extract year and month from keys like "2025-04"
+  const getMonthLabel = (monthKey: string) => {
     const parts = monthKey.split('-');
     if (parts.length === 2) {
       const month = parseInt(parts[1]);
@@ -168,9 +200,14 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
       ];
-      return monthNames[month - 1] || monthKey;
+      return `${monthNames[month - 1] || monthKey} ${parts[0]}`;
     }
     return monthKey;
+  };
+
+  const getPaymentOptionLabel = (payment: PaymentSchedule['payments'][0]) => {
+    if (payment.type === 'deposit') return `Deposit — R${payment.amount.toLocaleString()} (${payment.status})`;
+    return `${getMonthLabel(payment.month)} — R${payment.amount.toLocaleString()} (${payment.status.replace('_', ' ')})`;
   };
 
   const getPaymentStatusColor = (status: string) => {
@@ -186,44 +223,92 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    setFormError(null);
     if (!selectedPayment || !paymentSchedule) {
-      alert('Please select a payment to process.');
+      setFormError('Please select a payment to process.');
       return;
     }
 
     if (paymentAmount <= 0) {
-      alert('Please enter a valid payment amount.');
+      setFormError('Please enter a valid payment amount.');
       return;
     }
 
     if (!paymentDate) {
-      alert('Please select a payment date.');
+      setFormError('Please select a payment date.');
       return;
     }
 
     // Validate payment date
     if (paymentValidation && !paymentValidation.isValid) {
-      alert(paymentValidation.errorMessage || 'Invalid payment date.');
+      setFormError(paymentValidation.errorMessage || 'Invalid payment date.');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // Get payment type for validation
+      const selectedPaymentData = paymentSchedule.payments.find(p => p.month === selectedPayment);
+      if (!selectedPaymentData) {
+        setFormError('Selected payment not found in schedule.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate: Only one payment per month per room (unless partial payments allowed)
+      const onePaymentValidation = await validateOnePaymentPerMonth(
+        paymentSchedule.id!,
+        selectedPayment,
+        allowPartialPayments
+      );
+      if (!onePaymentValidation.isValid && !bypassDuplicate) {
+        setDuplicateWarning(onePaymentValidation.errorMessage || 'A payment already exists for this month.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate: If room was Empty last month → deposit must be taken before rent
+      const depositValidation = await validateDepositBeforeRent(
+        lease.roomId,
+        paymentSchedule.id!,
+        selectedPaymentData.type
+      );
+      if (!depositValidation.isValid) {
+        setFormError(depositValidation.errorMessage || 'Deposit validation failed.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate: Outstanding rent from previous month must be settled first
+      const outstandingValidation = await validateOutstandingRent(
+        paymentSchedule.id!,
+        selectedPayment
+      );
+      if (!outstandingValidation.isValid) {
+        setFormError(outstandingValidation.errorMessage || 'Outstanding rent validation failed.');
+        setIsSubmitting(false);
+        return;
+      }
+      // Accumulate if this is a top-up on a partial payment
+      const existingPaid = selectedPaymentData.status === 'partial'
+        ? (selectedPaymentData.paidAmount || 0)
+        : 0;
+      const totalPaid = existingPaid + paymentAmount;
+
       // Determine payment status based on validation
       let paymentStatus: 'paid' | 'partial' | 'pending_approval';
       if (paymentValidation && paymentValidation.requiresApproval) {
         paymentStatus = 'pending_approval';
       } else {
-        paymentStatus = paymentAmount >= paymentSchedule.payments.find(p => p.month === selectedPayment)?.amount! 
-          ? 'paid' : 'partial';
+        paymentStatus = totalPaid >= selectedPaymentData.amount ? 'paid' : 'partial';
       }
 
       const paymentUpdate: any = {
         status: paymentStatus,
-        paidAmount: paymentAmount,
+        paidAmount: totalPaid,
         paymentMethod: paymentMethod,
         requiresApproval: paymentValidation?.requiresApproval || false,
-        capturedBy: 'current_user_id', // TODO: Get from auth context
+        capturedBy: user?.uid || '',
         capturedAt: Timestamp.now(),
       };
 
@@ -256,10 +341,6 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
         paymentUpdate.notes = notes.trim();
       }
 
-      console.log('PaymentCapture - paymentUpdate:', paymentUpdate);
-      console.log('PaymentCapture - selectedPayment:', selectedPayment);
-      console.log('PaymentCapture - paymentSchedule.id:', paymentSchedule.id);
-
       await paymentScheduleService.updatePaymentInSchedule(
         paymentSchedule.id!,
         selectedPayment,
@@ -267,7 +348,7 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
       );
 
       // Calculate penalty for this late payment
-      const selectedPaymentData = paymentSchedule.payments.find(p => p.month === selectedPayment);
+      // Note: selectedPaymentData is already declared above (line 215), reuse it
       if (selectedPaymentData && paymentDate) {
         const dueDate = selectedPaymentData.dueDate.toDate();
         const paidDate = new Date(paymentDate);
@@ -302,6 +383,30 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
         }
       }
 
+      // Carry over overpayment credit to the next pending month
+      if (paymentStatus === 'paid') {
+        const credit = totalPaid - selectedPaymentData.amount;
+        if (credit > 0) {
+          const nextPending = [...paymentSchedule.payments]
+            .filter(p => p.month !== selectedPayment && (p.status === 'pending' || p.status === 'overdue'))
+            .sort((a, b) => a.dueDate.toDate().getTime() - b.dueDate.toDate().getTime())[0];
+          if (nextPending) {
+            const creditStatus = credit >= nextPending.amount ? 'paid' : 'partial';
+            await paymentScheduleService.updatePaymentInSchedule(
+              paymentSchedule.id!,
+              nextPending.month,
+              {
+                status: creditStatus,
+                paidAmount: Math.min(credit, nextPending.amount),
+                paidDate: Timestamp.fromDate(new Date(paymentDate)),
+                paymentMethod,
+                notes: `Credit carried over from overpayment on ${selectedPayment}`,
+              }
+            );
+          }
+        }
+      }
+
       // Process penalty payment if included
       if (includePenaltyPayment && penaltyPaymentAmount > 0) {
         await aggregatedPenaltyService.processPenaltyPayment(
@@ -315,17 +420,50 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
       // Reload payment schedule
       await loadPaymentSchedule();
       
-      // Show appropriate success message
-      if (paymentValidation && paymentValidation.requiresApproval) {
-        alert('Payment captured successfully! It has been sent for admin approval.');
-      } else {
-        alert('Payment captured successfully!');
+      // Auto-switch room status from 'locked' to 'occupied' after payment
+      if (paymentStatus !== 'pending_approval') {
+        try {
+          const room = await roomService.getRoomById(lease.roomId);
+          if (room) {
+            // Check if room was locked (either status or lastOccupancyState)
+            if (room.status === 'locked' || room.lastOccupancyState === 'locked') {
+              await roomService.updateRoom(lease.roomId, {
+                status: 'occupied',
+                updatedAt: Timestamp.now(),
+                // Keep lastOccupancyState for history tracking
+              });
+              // Room status auto-switched from locked to occupied after payment;
+            }
+          }
+        } catch (error) {
+          console.error('Error auto-switching room status:', error);
+          // Don't block payment success if room update fails
+        }
       }
       
-      onSuccess?.();
+      // Reload schedule so receipt reflects the just-saved state
+      const freshSchedule = await paymentScheduleService.getPaymentScheduleByLease(lease.id!);
+      // Show receipt modal (onSuccess is called when receipt is closed)
+      setReceiptData({
+        amount: paymentAmount,
+        method: paymentMethod,
+        date: paymentDate,
+        month: selectedPayment,
+        paymentSchedule: freshSchedule ?? paymentSchedule,
+        renterName,
+        roomNumber,
+        facilityName,
+        penaltyPaid: includePenaltyPayment ? penaltyPaymentAmount : 0,
+        penaltyMethod: penaltyPaymentMethod,
+      });
+      setShowReceipt(true);
+
+      if (paymentValidation && paymentValidation.requiresApproval) {
+        showSuccess('Payment sent for admin approval.');
+      }
     } catch (error) {
       console.error('Error processing payment:', error);
-      alert('Failed to process payment. Please try again.');
+      showError('Failed to process payment. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -351,15 +489,16 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setFileError(null);
       // Validate file type
       if (!file.type.startsWith('image/')) {
-        alert('Please select an image file.');
+        setFileError('Please select an image file.');
         return;
       }
-      
+
       // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB.');
+        setFileError('File size must be less than 5MB.');
         return;
       }
       
@@ -383,13 +522,11 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   };
 
   const handleCameraCaptureSuccess = (file: File) => {
-    console.log('Camera capture success, file:', file);
     setPaymentProof(file);
-    
+
     // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
-      console.log('Preview created:', e.target?.result);
       setProofPreview(e.target?.result as string);
     };
     reader.readAsDataURL(file);
@@ -400,6 +537,30 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
   const removeProof = () => {
     setPaymentProof(null);
     setProofPreview(null);
+  };
+
+  // Compute the late fee that WILL be charged when this payment is submitted.
+  // Used both for the orange banner and to pre-fill the penalty collection section
+  // even before the penalty record exists (i.e. on the first-ever late payment).
+  const computePendingLateFee = (): { fee: number; daysLate: number; lateFeeAmount: number } => {
+    if (!selectedPayment || !paymentDate || !paymentSchedule) return { fee: 0, daysLate: 0, lateFeeAmount: 0 };
+    const payment = paymentSchedule.payments.find(p => p.month === selectedPayment);
+    if (!payment) return { fee: 0, daysLate: 0, lateFeeAmount: 0 };
+    const lateFeeAmount = lease.businessRules?.lateFeeAmount || 0;
+    if (lateFeeAmount <= 0) return { fee: 0, daysLate: 0, lateFeeAmount: 0 };
+    const dueDate = payment.dueDate.toDate();
+    const paid = new Date(paymentDate);
+    const lateFeeStartDay = lease.businessRules?.lateFeeStartDay || 0;
+    const startDay = lateFeeStartDay || (dueDate.getDate() + (lease.businessRules?.gracePeriodDays || 0));
+    let startDate = new Date(dueDate.getFullYear(), dueDate.getMonth(), startDay);
+    // If startDate falls before (or on) dueDate, it refers to the NEXT month.
+    // e.g. rent due Mar 28, lateFeeStartDay=4 → late fee starts Apr 4, not Mar 4.
+    if (startDate <= dueDate) {
+      startDate = new Date(dueDate.getFullYear(), dueDate.getMonth() + 1, startDay);
+    }
+    if (paid <= startDate) return { fee: 0, daysLate: 0, lateFeeAmount };
+    const daysLate = Math.ceil((paid.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+    return { fee: daysLate * lateFeeAmount, daysLate, lateFeeAmount };
   };
 
   if (isLoading) {
@@ -444,7 +605,10 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
           <DollarSign className="w-8 h-8 text-primary-500" />
           <div>
             <h3 className="text-xl font-semibold text-white">Capture Payment</h3>
-            <p className="text-gray-400">Lease ID: {lease.id}</p>
+            <p className="text-gray-400">
+              {roomNumber ? `Room ${roomNumber}` : '—'}
+              {renterName ? ` · ${renterName}` : ''}
+            </p>
           </div>
         </div>
         <Button variant="ghost" onClick={onCancel}>
@@ -477,295 +641,242 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Payment Selection */}
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-semibold text-white">Payment Selection</h4>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsPaymentSelectionExpanded(!isPaymentSelectionExpanded)}
-              className="flex items-center space-x-2"
-            >
-              <span className="text-sm">
-                {isPaymentSelectionExpanded ? 'Collapse' : 'Change Payment'}
-              </span>
-              {isPaymentSelectionExpanded ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </Button>
-          </div>
-
-          {/* Selected Payment Display */}
-          {selectedPayment && (
-            <div className="mb-4 p-4 bg-primary-500/10 border border-primary-500/30 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-3 h-3 rounded-full bg-primary-500" />
-                  <div>
-                    <span className="text-white font-medium text-lg">
-                      {paymentSchedule.payments.find(p => p.month === selectedPayment)?.type === 'deposit' 
-                        ? 'Deposit' 
-                        : `Month ${selectedPayment} (${getMonthName(selectedPayment)})`
-                      }
-                    </span>
-                    <p className="text-sm text-gray-400">
-                      Due: {formatDate(paymentSchedule.payments.find(p => p.month === selectedPayment)?.dueDate)}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-white font-bold text-lg">
-                    R{paymentSchedule.payments.find(p => p.month === selectedPayment)?.amount.toLocaleString()}
-                  </span>
-                  <div className="mt-1">
-                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      getPaymentStatusColor(paymentSchedule.payments.find(p => p.month === selectedPayment)?.status || 'pending')
-                    }`}>
-                      {paymentSchedule.payments.find(p => p.month === selectedPayment)?.status.replace('_', ' ').toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Collapsible Payment List */}
-          {isPaymentSelectionExpanded && (
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {paymentSchedule.payments.map((payment) => (
-                <div 
-                  key={payment.month} 
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedPayment === payment.month 
-                      ? 'border-primary-500 bg-primary-500/10' 
-                      : 'border-gray-600 hover:border-gray-500'
-                  }`}
-                  onClick={() => {
-                    setSelectedPayment(payment.month);
-                    setPaymentAmount(payment.amount);
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        payment.type === 'deposit' ? 'bg-yellow-500' : 'bg-blue-500'
-                      }`} />
-                      <div>
-                        <span className="text-white font-medium">
-                          {payment.type === 'deposit' ? 'Deposit' : `Month ${payment.month} (${getMonthName(payment.month)})`}
-                        </span>
-                        <p className="text-xs text-gray-400">
-                          Due: {formatDate(payment.dueDate)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <div className="text-center">
-                        <span className="text-white font-medium">R{payment.amount.toLocaleString()}</span>
-                        
-                        {/* Payment Status with Details */}
-                        <div className="mt-1 space-y-1">
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(payment.status)}`}>
-                            {payment.status.replace('_', ' ').toUpperCase()}
-                          </div>
-                          
-                          {/* Show paid amount and remaining for partial payments */}
-                          {payment.status === 'partial' && payment.paidAmount && (
-                            <div className="text-xs text-gray-400">
-                              Paid: R{payment.paidAmount.toLocaleString()}
-                              <br />
-                              Owed: R{(payment.amount - payment.paidAmount).toLocaleString()}
-                            </div>
-                          )}
-                          
-                          {/* Show payment date for paid/partial payments */}
-                          {(payment.status === 'paid' || payment.status === 'partial') && payment.paidDate && (
-                            <div className="text-xs text-gray-400">
-                              Paid: {formatDate(payment.paidDate)}
-                            </div>
-                          )}
-                          
-                          {/* Show payment method if available */}
-                          {payment.paymentMethod && (payment.status === 'paid' || payment.status === 'partial') && (
-                            <div className="text-xs text-gray-400 capitalize">
-                              {payment.paymentMethod.replace('_', ' ')}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {(payment.status === 'paid' || payment.status === 'partial' || payment.status === 'pending_approval') && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditPayment(payment)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Payment Details */}
-        <Card>
-          <h4 className="text-lg font-semibold text-white mb-4">
-            Payment Details for {selectedPayment ? (
-              paymentSchedule.payments.find(p => p.month === selectedPayment)?.type === 'deposit' 
-                ? 'Deposit' 
-                : `Month ${selectedPayment} (${getMonthName(selectedPayment)})`
-            ) : 'Selected Payment'}
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Payment Amount (R)"
-              type="number"
-              value={paymentAmount}
-              onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-              min="0"
-              required
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
-              <Input
-                label="Payment Date"
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                required
-              />
-              {paymentValidation && (
-                <div className="mt-2">
-                  {!paymentValidation.isValid && (
-                    <div className="flex items-center space-x-2 text-red-400 text-sm">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span>{paymentValidation.errorMessage}</span>
-                    </div>
-                  )}
-                  {paymentValidation.isValid && paymentValidation.requiresApproval && (
-                    <div className="flex items-center space-x-2 text-yellow-400 text-sm">
-                      <Clock className="w-4 h-4" />
-                      <span>This payment will require admin approval</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Payment Method</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Paying for</label>
               <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                value={selectedPayment}
+                onChange={(e) => {
+                  const p = paymentSchedule.payments.find(p => p.month === e.target.value);
+                  setSelectedPayment(e.target.value);
+                  if (p) {
+                    const remaining = p.status === 'partial'
+                      ? Math.max(0, p.amount - (p.paidAmount || 0))
+                      : p.amount;
+                    setPaymentAmount(remaining);
+                  }
+                }}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="cash">Cash</option>
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="eft">EFT</option>
-                <option value="card">Card Payment</option>
-                <option value="cheque">Cheque</option>
+                <option value="">— Select payment —</option>
+                {paymentSchedule.payments.map((payment) => (
+                  <option key={payment.month} value={payment.month}>
+                    {getPaymentOptionLabel(payment)}
+                  </option>
+                ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Notes (Optional)</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                rows={3}
-                placeholder="Any additional notes about this payment..."
-              />
-            </div>
+            {selectedPayment && (() => {
+              const p = paymentSchedule.payments.find(p => p.month === selectedPayment);
+              if (!p) return null;
+              return (
+                <div className="flex items-center justify-between text-sm text-gray-400">
+                  <span>Due: {formatDate(p.dueDate)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(p.status)}`}>
+                      {p.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                    {(p.status === 'paid' || p.status === 'partial' || p.status === 'pending_approval') && (
+                      <Button variant="ghost" size="sm" onClick={() => handleEditPayment(p)}>
+                        <Edit className="w-3 h-3" />
+                      </Button>
+                    )}
+                    {p.status === 'partial' && p.paidAmount != null && (
+                      <span className="text-yellow-400 text-xs">
+                        {(p as any).notes?.includes('Credit carried over')
+                          ? `Credit R${p.paidAmount.toLocaleString()} applied — R${(p.amount - p.paidAmount).toLocaleString()} due`
+                          : `R${p.paidAmount.toLocaleString()} paid — R${(p.amount - p.paidAmount).toLocaleString()} still owed`
+                        }
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </Card>
 
-        {/* Penalty Calculator */}
-        {selectedPayment && paymentDate && (
-          <PenaltyCalculator
-            dueDate={paymentSchedule.payments.find(p => p.month === selectedPayment)?.dueDate.toDate() || new Date()}
-            paidDate={new Date(paymentDate)}
-            businessRules={{
-              lateFeeAmount: lease.businessRules?.lateFeeAmount || 0,
-              lateFeeStartDay: lease.businessRules?.lateFeeStartDay || 0,
-              gracePeriodDays: lease.businessRules?.gracePeriodDays || 0,
-            }}
-            baseAmount={paymentAmount}
-            showDetails={true}
-          />
-        )}
+        {/* Payment Details + Penalties — merged card */}
+        {(() => {
+          const { fee: pendingFee, daysLate, lateFeeAmount: lfAmount } = computePendingLateFee();
+          const existingOutstanding = paymentSchedule?.aggregatedPenalty?.outstandingAmount || 0;
+          const totalPenaltyOwed = existingOutstanding + pendingFee;
+          const totalCollecting = paymentAmount + (includePenaltyPayment ? penaltyPaymentAmount : 0);
 
-        {/* Aggregated Penalty Payment Section */}
-        {paymentSchedule?.aggregatedPenalty && paymentSchedule.aggregatedPenalty.outstandingAmount > 0 && (
-          <Card>
-            <div className="flex items-center space-x-3 mb-4">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-              <h4 className="text-lg font-semibold text-white">Outstanding Penalties</h4>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-yellow-400 font-medium">Total Outstanding Penalties:</span>
-                  <span className="text-yellow-400 font-bold text-lg">R{paymentSchedule.aggregatedPenalty.outstandingAmount.toLocaleString()}</span>
-                </div>
-                <div className="text-sm text-gray-400">
-                  Paid: R{paymentSchedule.aggregatedPenalty.paidAmount.toLocaleString()} | 
-                  Total: R{paymentSchedule.aggregatedPenalty.totalAmount.toLocaleString()}
-                </div>
-              </div>
+          // Context banner for short/over payments
+          const selectedP = paymentSchedule?.payments.find(p => p.month === selectedPayment);
+          const isCredit = selectedP?.status === 'partial' && (selectedP as any).notes?.includes('Credit carried over');
+          const isShortPaid = selectedP?.status === 'partial' && !isCredit;
+          const existingPaid = selectedP?.paidAmount || 0;
 
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="includePenaltyPayment"
-                  checked={includePenaltyPayment}
-                  onChange={(e) => {
-                    setIncludePenaltyPayment(e.target.checked);
-                    if (e.target.checked) {
-                      setPenaltyPaymentAmount(paymentSchedule.aggregatedPenalty?.outstandingAmount || 0);
-                    } else {
-                      setPenaltyPaymentAmount(0);
-                    }
-                  }}
-                  className="w-4 h-4 text-primary-500 bg-gray-700 border-gray-600 rounded focus:ring-primary-500"
+          return (
+            <Card>
+              <h4 className="text-lg font-semibold text-white mb-4">Payment Details</h4>
+
+              {/* Short-payment context banner */}
+              {isShortPaid && selectedP && (
+                <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm">
+                  <span className="text-yellow-300 font-medium">Short payment: </span>
+                  <span className="text-yellow-200">
+                    Actual amount due is R{selectedP.amount.toLocaleString()}, but only R{existingPaid.toLocaleString()} was paid — R{(selectedP.amount - existingPaid).toLocaleString()} is still outstanding for this month.
+                  </span>
+                </div>
+              )}
+
+              {/* Overpayment credit banner */}
+              {isCredit && selectedP && (
+                <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm">
+                  <span className="text-blue-300 font-medium">Overpayment credit: </span>
+                  <span className="text-blue-200">
+                    Actual amount due is R{selectedP.amount.toLocaleString()}, but a credit of R{existingPaid.toLocaleString()} carried over from a previous overpayment — only R{(selectedP.amount - existingPaid).toLocaleString()} remains due this month.
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Payment Amount (R)"
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                  min="0"
+                  step="0.01"
+                  required
                 />
-                <label htmlFor="includePenaltyPayment" className="text-white">
-                  Include penalty payment with this transaction
-                </label>
+                <div>
+                  <Input
+                    label="Payment Date"
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    required
+                  />
+                  {paymentValidation && (
+                    <div className="mt-2">
+                      {!paymentValidation.isValid && (
+                        <div className="flex items-center space-x-2 text-red-400 text-sm">
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>{paymentValidation.errorMessage}</span>
+                        </div>
+                      )}
+                      {paymentValidation.isValid && paymentValidation.requiresApproval && (
+                        <div className="flex items-center space-x-2 text-yellow-400 text-sm">
+                          <Clock className="w-4 h-4" />
+                          <span>This payment will require admin approval</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Payment Method</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="eft">EFT</option>
+                    <option value="card">Card Payment</option>
+                    <option value="cheque">Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Notes (Optional)</label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+                    rows={1}
+                    placeholder="Any additional notes..."
+                  />
+                </div>
               </div>
 
-              {includePenaltyPayment && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Penalty Payment Amount (R)"
-                    type="number"
-                    value={penaltyPaymentAmount}
-                    onChange={(e) => setPenaltyPaymentAmount(parseFloat(e.target.value) || 0)}
-                    min="0"
-                    max={paymentSchedule.aggregatedPenalty?.outstandingAmount?.toString() || "0"}
-                    placeholder="Enter penalty amount"
-                  />
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Payment Method</label>
-                    <select
-                      value={penaltyPaymentMethod}
-                      onChange={(e) => setPenaltyPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                      <option value="eft">EFT</option>
-                      <option value="card">Card Payment</option>
-                      <option value="cheque">Cheque</option>
-                    </select>
+              {/* Penalty section — inline when applicable */}
+              {totalPenaltyOwed > 0 && (
+                <div className="mt-5 pt-4 border-t border-gray-700 space-y-3">
+                  {/* Breakdown */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 text-sm text-orange-300">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>
+                        Late fee: <strong>R{totalPenaltyOwed.toLocaleString()}</strong>
+                        {pendingFee > 0 && ` (${daysLate} day${daysLate !== 1 ? 's' : ''} × R${lfAmount}/day)`}
+                        {existingOutstanding > 0 && pendingFee > 0 && ` + R${existingOutstanding.toLocaleString()} outstanding`}
+                        {existingOutstanding > 0 && pendingFee === 0 && ` outstanding`}
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer ml-4 flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        id="includePenaltyPayment"
+                        checked={includePenaltyPayment}
+                        onChange={(e) => {
+                          setIncludePenaltyPayment(e.target.checked);
+                          setPenaltyPaymentAmount(e.target.checked ? totalPenaltyOwed : 0);
+                        }}
+                        className="w-4 h-4 text-primary-500 bg-gray-700 border-gray-600 rounded focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-white">Collect now</span>
+                    </label>
+                  </div>
+
+                  {/* Penalty amount + method — only when collecting */}
+                  {includePenaltyPayment && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6">
+                      <Input
+                        label="Penalty Amount (R)"
+                        type="number"
+                        value={penaltyPaymentAmount}
+                        onChange={(e) => setPenaltyPaymentAmount(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        step="0.01"
+                        max={totalPenaltyOwed.toString()}
+                        placeholder="Enter penalty amount"
+                      />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Penalty Method</label>
+                        <select
+                          value={penaltyPaymentMethod}
+                          onChange={(e) => setPenaltyPaymentMethod(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="bank_transfer">Bank Transfer</option>
+                          <option value="eft">EFT</option>
+                          <option value="card">Card Payment</option>
+                          <option value="cheque">Cheque</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Total line — only when collecting penalty */}
+              {includePenaltyPayment && penaltyPaymentAmount > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-600">
+                  <div className="space-y-1 text-sm text-gray-400">
+                    <div className="flex justify-between">
+                      <span>Rent</span>
+                      <span>R{paymentAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-orange-300">
+                      <span>Penalty</span>
+                      <span>R{penaltyPaymentAmount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-600">
+                    <span className="text-white font-semibold">Total collecting today</span>
+                    <span className="text-primary-500 font-bold text-xl">R{totalCollecting.toLocaleString()}</span>
                   </div>
                 </div>
               )}
-            </div>
-          </Card>
-        )}
+            </Card>
+          );
+        })()}
 
         {/* Payment Proof Section */}
         <Card>
@@ -801,6 +912,9 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
                 Upload a photo or take a picture of the payment receipt/proof
               </p>
               
+              {fileError && (
+                <p className="text-red-400 text-sm">{fileError}</p>
+              )}
               <div className="flex space-x-3">
                 <div className="flex-1">
                   <input
@@ -832,12 +946,42 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
           )}
         </Card>
 
+        {/* Duplicate payment warning */}
+        {duplicateWarning && (
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-yellow-300 text-sm font-medium">Duplicate Payment Warning</p>
+                <p className="text-yellow-400/80 text-sm mt-1">{duplicateWarning}</p>
+                <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bypassDuplicate}
+                    onChange={e => setBypassDuplicate(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-yellow-500 focus:ring-yellow-500"
+                  />
+                  <span className="text-yellow-300 text-sm">I understand — record this payment anyway</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inline form error banner */}
+        {formError && (
+          <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <span className="text-red-300 text-sm">{formError}</span>
+          </div>
+        )}
+
         {/* Form Actions */}
         <div className="flex justify-end space-x-4">
           <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || (!!duplicateWarning && !bypassDuplicate)}>
             <CheckCircle className="w-4 h-4 mr-2" />
             {isSubmitting ? 'Processing...' : 'Process Payment'}
           </Button>
@@ -864,6 +1008,28 @@ const PaymentCapture: React.FC<PaymentCaptureProps> = ({ lease, onSuccess, onCan
         <CameraCapture
           onCapture={handleCameraCaptureSuccess}
           onClose={handleCameraClose}
+        />
+      )}
+
+      {/* Payment Receipt Modal */}
+      {showReceipt && receiptData && (
+        <PaymentReceiptModal
+          amount={receiptData.amount}
+          paymentMethod={receiptData.method}
+          paymentDate={receiptData.date}
+          monthCovered={receiptData.month}
+          leaseId={lease.id ?? ''}
+          paymentSchedule={receiptData.paymentSchedule}
+          renterName={receiptData.renterName}
+          roomNumber={receiptData.roomNumber}
+          facilityName={receiptData.facilityName}
+          penaltyPaid={receiptData.penaltyPaid}
+          penaltyMethod={receiptData.penaltyMethod}
+          onClose={() => {
+            setShowReceipt(false);
+            setReceiptData(null);
+            onSuccess?.();
+          }}
         />
       )}
     </div>

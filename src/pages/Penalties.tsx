@@ -11,9 +11,11 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import { TableSkeleton } from '../components/ui/SkeletonLoader';
 import { facilityService, roomService, paymentScheduleService, leaseService, renterService } from '../services/firebaseService';
 import { aggregatedPenaltyService } from '../services/aggregatedPenaltyService';
 import { useRole } from '../contexts/RoleContext';
+import { useToast } from '../contexts/ToastContext';
 import PenaltyBreakdown from '../components/forms/PenaltyBreakdown';
 import PaymentCapture from '../components/forms/PaymentCapture';
 
@@ -69,6 +71,7 @@ interface LeaseAgreement {
 
 const Penalties: React.FC = () => {
   const { currentRole } = useRole();
+  const { showSuccess, showError } = useToast();
   const [penaltyTransactions, setPenaltyTransactions] = useState<AggregatedPenaltyTransaction[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [selectedFacility, setSelectedFacility] = useState<string>('all');
@@ -147,10 +150,10 @@ const Penalties: React.FC = () => {
     try {
       await aggregatedPenaltyService.calculateDailyPenalties();
       await loadData();
-      alert('Penalty calculation completed!');
+      showSuccess('Penalty calculation completed!');
     } catch (error) {
       console.error('Error calculating penalties:', error);
-      alert('Failed to calculate penalties');
+      showError('Failed to calculate penalties');
     }
   };
 
@@ -167,11 +170,11 @@ const Penalties: React.FC = () => {
         setSelectedLease(lease);
         setShowPaymentCapture(true);
       } else {
-        alert('Lease not found for this penalty transaction');
+        showError('Lease not found for this penalty transaction');
       }
     } catch (error) {
       console.error('Error loading lease for payment capture:', error);
-      alert('Failed to load lease details');
+      showError('Failed to load lease details');
     }
   };
 
@@ -187,8 +190,8 @@ const Penalties: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+      <div className="p-6">
+        <TableSkeleton rows={8} cols={5} />
       </div>
     );
   }

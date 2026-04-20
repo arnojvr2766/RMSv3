@@ -1,10 +1,247 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow all operations for development/testing
-    // TODO: Replace with proper security rules in production
+
+    // -----------------------------------------------------------------------
+    // Helper functions
+    // -----------------------------------------------------------------------
+
+    // Require the caller to be signed in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Read the caller's user doc (cached by Firestore across function calls)
+    function callerDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isSystemAdmin() {
+      return isAuthenticated() && userDocExists() && callerDoc().role == 'system_admin';
+    }
+
+    function isAnyStaff() {
+      return isAuthenticated() && userDocExists() && callerDoc().role in ['system_admin', 'standard_user'];
+    }
+
+    // -----------------------------------------------------------------------
+    // users
+    //   - Any authenticated user can read their own document
+    //   - system_admin can read/write all user documents
+    //   - No one else can write to users (account creation is server-side)
+    // -----------------------------------------------------------------------
+    match /users/{userId} {
+      allow read:   if isAuthenticated() && (request.auth.uid == userId || isSystemAdmin());
+      allow create: if isSystemAdmin();
+      // Own-user updates (e.g. lastLoginAt) don't require callerDoc — checked by uid match only
+      allow update: if (isAuthenticated() &&
+                        request.auth.uid == userId &&
+                        !request.resource.data.diff(resource.data).affectedKeys()
+                          .hasAny(['role', 'status', 'organizationId'])) ||
+                       isSystemAdmin();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // organizationSettings
+    //   - Any staff can read (needed for permission checks throughout the app)
+    //   - Only system_admin can write
+    // -----------------------------------------------------------------------
+    match /organizationSettings/{docId} {
+      allow read:  if isAnyStaff();
+      allow write: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // facilities
+    //   - Any staff can read
+    //   - Only system_admin can create/update/delete
+    // -----------------------------------------------------------------------
+    match /facilities/{facilityId} {
+      allow read:   if isAnyStaff();
+      allow write:  if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // rooms
+    //   - Any staff can read
+    //   - Any staff can create/update (standard users update status during checks)
+    //   - Only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /rooms/{roomId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // renters
+    //   - Any staff can read/write (standard users manage tenant onboarding)
+    //   - Only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /renters/{renterId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // leases
+    //   - Any staff can read/write
+    //   - Only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /leases/{leaseId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // payment_schedules + paymentSchedules (both names used in codebase)
+    //   - Any staff can read/write; only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /payment_schedules/{scheduleId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    match /paymentSchedules/{scheduleId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // payment_approvals
+    //   - Any staff can read
+    //   - Standard users can create (submit for approval)
+    //   - Only system_admin can update (approve/reject) or delete
+    // -----------------------------------------------------------------------
+    match /payment_approvals/{approvalId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isSystemAdmin();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // penalties
+    //   - Any staff can read/write; only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /penalties/{penaltyId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // deposit_payouts
+    //   - Any staff can read/write; only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /deposit_payouts/{payoutId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // maintenance_expenses
+    //   - Any staff can read/write; only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /maintenance_expenses/{expenseId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // inspections
+    //   - Any staff can read/write; only system_admin can delete
+    // -----------------------------------------------------------------------
+    match /inspections/{inspectionId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isAnyStaff();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // notifications
+    //   - Users can only read/update (mark read) their own notifications
+    //   - No client-side creates or deletes (server/Cloud Functions write these)
+    // -----------------------------------------------------------------------
+    match /notifications/{notificationId} {
+      // Any staff can create notifications (client services create them on login checks)
+      allow create: if isAnyStaff();
+      // Users can only read their own notifications
+      allow read:   if isAuthenticated() &&
+                       resource.data.userId == request.auth.uid;
+      // Users can only mark their own notifications as read
+      allow update: if isAuthenticated() &&
+                       resource.data.userId == request.auth.uid &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['read', 'readAt']);
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // roomStatusHistory (written by Cloud Functions and client services)
+    // -----------------------------------------------------------------------
+    match /roomStatusHistory/{historyId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if false; // History is immutable
+      allow delete: if false;
+    }
+
+    // -----------------------------------------------------------------------
+    // complaints
+    //   - Any staff can read/create; only system_admin can update (resolve) or delete
+    // -----------------------------------------------------------------------
+    match /complaints/{complaintId} {
+      allow read:   if isAnyStaff();
+      allow create: if isAnyStaff();
+      allow update: if isSystemAdmin();
+      allow delete: if isSystemAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // trainingProgress
+    //   - Users can read/write their own progress document
+    //   - system_admin can read all (for the team progress dashboard)
+    // -----------------------------------------------------------------------
+    match /trainingProgress/{userId} {
+      allow read:   if isAuthenticated() && (request.auth.uid == userId || isSystemAdmin());
+      allow write:  if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // -----------------------------------------------------------------------
+    // userSettings
+    //   - Each user can only read/write their own settings document
+    // -----------------------------------------------------------------------
+    match /userSettings/{userId} {
+      allow read:   if isAuthenticated() && request.auth.uid == userId;
+      allow write:  if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // -----------------------------------------------------------------------
+    // Deny everything else by default
+    // -----------------------------------------------------------------------
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

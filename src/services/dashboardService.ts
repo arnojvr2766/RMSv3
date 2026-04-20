@@ -320,32 +320,87 @@ class DashboardService {
   }
 
   private async getRecentPayments() {
-    // Mock recent payments data
-    return [
-      { id: '1', room: 'Y014', tenant: 'Bongani Mthembu', amount: 1782, status: 'paid', date: '2025-01-15', method: 'bank_transfer' },
-      { id: '2', room: 'R005', tenant: 'Nomsa Dlamini', amount: 1736, status: 'paid', date: '2025-01-14', method: 'eft' },
-      { id: '3', room: 'Y006', tenant: 'Thandeka Mthembu', amount: 1396, status: 'pending', date: '2025-01-13', method: 'cash' },
-      { id: '4', room: 'R007', tenant: 'Mandla Ngcobo', amount: 910, status: 'overdue', date: '2025-01-12', method: 'bank_transfer' }
-    ];
+    try {
+      const schedulesRef = collection(db, 'payment_schedules');
+      const snapshot = await getDocs(schedulesRef);
+
+      const payments: any[] = [];
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.payments && Array.isArray(data.payments)) {
+          data.payments.forEach((p: any) => {
+            if (p.paidDate || p.status === 'paid' || p.status === 'partial') {
+              payments.push({
+                id: `${doc.id}-${p.month}`,
+                room: data.roomNumber || data.roomId || '—',
+                tenant: data.renterName || data.renterId || '—',
+                amount: p.paidAmount || p.amount || 0,
+                status: p.status,
+                date: p.paidDate?.toDate?.().toISOString().split('T')[0] || '',
+                method: p.paymentMethod || '',
+              });
+            }
+          });
+        }
+      });
+
+      // Sort by date descending and return most recent 10
+      return payments
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .slice(0, 10);
+    } catch {
+      return [];
+    }
   }
 
   private async getRecentLeases() {
-    // Mock recent leases data
-    return [
-      { id: '1', room: 'Y017', tenant: 'Mxolisi Nkosi', startDate: '2025-01-15', rent: 1080, status: 'active' },
-      { id: '2', room: 'R013', tenant: 'Thulani Mthembu', startDate: '2025-01-14', rent: 1665, status: 'active' },
-      { id: '3', room: 'Y011', tenant: 'Nomvula Dlamini', startDate: '2025-01-13', rent: 1016, status: 'pending' }
-    ];
+    try {
+      const leasesRef = collection(db, 'leases');
+      const q = query(leasesRef, orderBy('createdAt', 'desc'), limit(5));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          room: data.roomId || '—',
+          tenant: data.renterId || '—',
+          startDate: data.terms?.startDate?.toDate?.().toISOString().split('T')[0] || '',
+          rent: data.terms?.monthlyRent || 0,
+          status: data.status || 'active',
+        };
+      });
+    } catch {
+      return [];
+    }
   }
 
   private async getRecentActivities() {
-    // Mock recent activities data
-    return [
-      { id: '1', type: 'payment', message: 'Payment received from Room Y014', time: '2 hours ago', amount: 1782 },
-      { id: '2', type: 'lease', message: 'New lease signed for Room Y017', time: '4 hours ago', tenant: 'Mxolisi Nkosi' },
-      { id: '3', type: 'maintenance', message: 'Maintenance request for Room R005', time: '6 hours ago', priority: 'medium' },
-      { id: '4', type: 'overdue', message: 'Overdue payment alert for Room R007', time: '8 hours ago', amount: 910 }
-    ];
+    // Build a combined activity feed from real data
+    try {
+      const [payments, leases] = await Promise.all([
+        this.getRecentPayments(),
+        this.getRecentLeases(),
+      ]);
+
+      const activities: any[] = [
+        ...payments.slice(0, 3).map(p => ({
+          id: p.id,
+          type: 'payment',
+          message: `Payment of R${p.amount?.toLocaleString()} for Room ${p.room}`,
+          time: p.date || '',
+        })),
+        ...leases.slice(0, 2).map(l => ({
+          id: l.id,
+          type: 'lease',
+          message: `Lease for Room ${l.room} — R${l.rent?.toLocaleString()}/mo`,
+          time: l.startDate || '',
+        })),
+      ];
+
+      return activities.sort((a, b) => (b.time || '').localeCompare(a.time || '')).slice(0, 5);
+    } catch {
+      return [];
+    }
   }
 }
 

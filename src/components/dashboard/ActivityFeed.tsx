@@ -8,8 +8,6 @@ import {
   CheckCircle,
   Clock,
   TrendingUp,
-  DollarSign,
-  UserPlus,
   Home,
   AlertCircle
 } from 'lucide-react';
@@ -32,7 +30,7 @@ interface ActivityFeedProps {
 }
 
 const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, maxItems = 10 }) => {
-  const getActivityIcon = (type: string, status?: string) => {
+  const getActivityIcon = (type: string) => {
     const iconProps = { className: "w-4 h-4" };
     
     switch (type) {
@@ -137,7 +135,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, maxItems = 10 }
                 className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-700/50 transition-colors duration-200"
               >
                 <div className={`p-2 rounded-lg ${getActivityColor(activity.type, activity.status)}`}>
-                  {getActivityIcon(activity.type, activity.status)}
+                  {getActivityIcon(activity.type)}
                 </div>
                 
                 <div className="flex-1 min-w-0">

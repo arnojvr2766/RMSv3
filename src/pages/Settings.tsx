@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Shield, Users, Building2, DoorClosed, RotateCcw, Check, Calendar, UserPlus, Mail, User, Crown, Wifi, WifiOff, Eye, Bell, Monitor, Database, Download, X, MoreVertical, Edit, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Settings, Shield, Users, Building2, DoorClosed, RotateCcw, Check, Calendar, UserPlus, Mail, User, Crown, Wifi, WifiOff, Eye, Bell, Monitor, Database, Download, X, MoreVertical, Edit, Trash2, UserCheck, UserX, Lock } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useOrganizationSettings } from '../contexts/OrganizationSettingsContext';
 import { useRole } from '../contexts/RoleContext';
@@ -7,6 +7,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import { UserService, type CreateUserRequest, type User as UserType } from '../services/userService';
+import { isValidEmail, EMAIL_ERROR } from '../utils/emailValidation';
 
 const SettingsPage: React.FC = () => {
   // User-specific settings (UI preferences)
@@ -55,6 +56,8 @@ const SettingsPage: React.FC = () => {
     setDefaultLateFee,
     defaultChildSurcharge,
     setDefaultChildSurcharge,
+    autoLockAfterDays,
+    setAutoLockAfterDays,
     isLoading: orgSettingsLoading,
     isOffline: orgSettingsOffline
   } = useOrganizationSettings();
@@ -243,6 +246,11 @@ const SettingsPage: React.FC = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidEmail(userFormData.email)) {
+      setUserCreationMessage({ type: 'error', message: EMAIL_ERROR });
+      return;
+    }
+
     setIsCreatingUser(true);
     setUserCreationMessage(null);
 
@@ -483,6 +491,12 @@ const SettingsPage: React.FC = () => {
                         type="email"
                         value={userFormData.email}
                         onChange={(e) => handleUserFormChange('email', e.target.value)}
+                        onBlur={() => {
+                          if (userFormData.email.trim() && !isValidEmail(userFormData.email))
+                            setUserCreationMessage({ type: 'error', message: EMAIL_ERROR });
+                          else if (userCreationMessage?.message === EMAIL_ERROR)
+                            setUserCreationMessage(null);
+                        }}
                         required
                       />
                       <div>
@@ -805,6 +819,46 @@ const SettingsPage: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            </Card>
+
+            {/* Auto-Lock Settings */}
+            <Card className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <Lock className="w-5 h-5 text-red-400" />
+                <div>
+                  <h3 className="text-white font-medium">Room Auto-Lock</h3>
+                  <p className="text-gray-400 text-sm">Automatically lock rooms when rent is overdue</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-600 rounded-lg">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Lock className="w-4 h-4 text-gray-400" />
+                  <div>
+                    <h4 className="text-white font-medium">Auto-Lock After Days</h4>
+                    <p className="text-gray-400 text-sm">
+                      Lock rooms automatically if no payment is received this many days into the month (e.g., 5 = lock after the 5th)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    value={autoLockAfterDays}
+                    onChange={(e) => setAutoLockAfterDays(Number(e.target.value))}
+                    disabled={orgSettingsLoading}
+                    className="w-20 px-3 py-2 bg-gray-700 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <span className="text-gray-400 text-sm">days into the month</span>
+                </div>
+                <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded">
+                  <p className="text-red-400 text-xs">
+                    When a room is auto-locked, the system admin will receive a notification. The room will auto-unlock when payment is approved.
+                  </p>
+                </div>
               </div>
             </Card>
           </div>
