@@ -15,7 +15,9 @@
     "firebase:deploy": "firebase deploy",
     "firebase:emulators": "firebase emulators:start",
     "dev:all": "concurrently \"npm run dev\" \"npm run firebase:emulators\" --names \"VITE,EMULATORS\" --prefix-colors \"cyan,magenta\"",
-    "create:users": "node scripts/create-emulator-users.js"
+    "create:users": "node scripts/create-emulator-users.js",
+    "reset:tenant-data:emulator": "node scripts/reset-tenant-data.js --emulator",
+    "reset:tenant-data": "node scripts/reset-tenant-data.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -4,6 +4,9 @@ node_modules/
 # Service account keys — NEVER commit these
 scripts/serviceAccountKey.json
 **/serviceAccountKey.json
+
+# Data reset backups — contain tenant PII, never commit
+scripts/backups/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
