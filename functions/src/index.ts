@@ -72,7 +72,18 @@ export const helpChat = onCall(
           system: HELP_KNOWLEDGE,
           messages,
         });
-        return { reply: response.text };
+        const reply = response.text;
+
+        // Log conversation asynchronously — never block or fail the response
+        db.collection('ai_chat_logs').add({
+          userId: request.auth?.uid ?? null,
+          userMessage: message,
+          aiReply: reply,
+          historyLength: (history || []).length,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        }).catch((err) => console.error('ai_chat_logs write failed:', err));
+
+        return { reply };
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         const isRateLimit = msg.includes('429') || msg.includes('quota') || msg.includes('rate');

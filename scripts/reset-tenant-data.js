@@ -76,7 +76,7 @@ if (useEmulator) {
   process.env.FIREBASE_STORAGE_EMULATOR_HOST = process.env.FIREBASE_STORAGE_EMULATOR_HOST || '127.0.0.1:9199';
   admin.initializeApp({
     projectId: EMULATOR_PROJECT_ID,
-    storageBucket: `${EMULATOR_PROJECT_ID}.appspot.com`,
+    storageBucket: `${EMULATOR_PROJECT_ID}.firebasestorage.app`,
   });
   expectedProjectId = EMULATOR_PROJECT_ID;
 } else {
@@ -96,7 +96,7 @@ if (useEmulator) {
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    storageBucket: `${EXPECTED_PROJECT_ID}.appspot.com`,
+    storageBucket: `${EXPECTED_PROJECT_ID}.firebasestorage.app`,
   });
   expectedProjectId = EXPECTED_PROJECT_ID;
 }
