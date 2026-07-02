@@ -301,14 +301,30 @@ export const bulkDeleteTenantData = onCall(async (request) => {
   // A deleted lease shouldn't leave its room stuck showing `occupied` — mirror
   // src/services/leaseTerminationService.ts's real termination flow, which sets
   // the room straight to 'available' (this codebase never actually implements
-  // the 'locked' pending-payout stage CLAUDE.md describes). Only rooms currently
-  // `occupied` are touched — `maintenance`/`unavailable`/`locked` rooms are left
-  // alone since those states can be unrelated to the specific lease being deleted
-  // (e.g. staff-flagged maintenance, or an overdue-rent auto-lock).
-  const leaseDocsForRoomReset = docsByType.leases ?? [];
-  const roomIdsForReset = Array.from(new Set(leaseDocsForRoomReset.map((d) => d.data().roomId as string)));
-  const roomDocsForReset = await queryDocsByIdIn(db, 'rooms', roomIdsForReset);
-  const occupiedRoomDocsForReset = roomDocsForReset.filter((d) => d.data().status === 'occupied');
+  // the 'locked' pending-payout stage CLAUDE.md describes). This is a general
+  // sweep, not just "rooms whose lease is being deleted right now": it also
+  // catches rooms orphaned by an earlier delete run from before this reset
+  // existed (lease already gone, room never got put back to 'available'). Only
+  // rooms currently `occupied` with NO active lease behind them are touched —
+  // `maintenance`/`unavailable`/`locked` rooms are left alone since those states
+  // can be unrelated (e.g. staff-flagged maintenance, an overdue-rent auto-lock).
+  const hasFacilityScope = !!facilityIds && facilityIds.length > 0;
+  let occupiedRoomDocsForReset: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  if (finalTypes.has('leases')) {
+    const scopedRoomDocs = hasFacilityScope
+      ? await queryByFieldIn(db, 'rooms', 'facilityId', facilityIds!)
+      : await getAllDocs(db, 'rooms');
+    const occupiedScopedRoomDocs = scopedRoomDocs.filter((d) => d.data().status === 'occupied');
+    if (occupiedScopedRoomDocs.length) {
+      const scopedLeaseDocs = hasFacilityScope
+        ? await queryByFieldIn(db, 'leases', 'facilityId', facilityIds!)
+        : await getAllDocs(db, 'leases');
+      const roomIdsWithActiveLease = new Set(
+        scopedLeaseDocs.filter((d) => d.data().status === 'active').map((d) => d.data().roomId as string)
+      );
+      occupiedRoomDocsForReset = occupiedScopedRoomDocs.filter((d) => !roomIdsWithActiveLease.has(d.id));
+    }
+  }
 
   if (data.dryRun) {
     const result: BulkDeleteResult = {
