@@ -549,3 +549,6 @@ export const checkOverdueRoomsAutoLock = onSchedule(
     console.log(`Auto-lock complete. Locked: ${locked}, Errors: ${errors}`);
   }
 );
+
+// ─── Bulk Data Operations (Settings > Data Management) ─────────────────────
+export * from './bulkDataOps';

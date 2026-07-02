@@ -8,6 +8,7 @@ import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import { UserService, type CreateUserRequest, type User as UserType } from '../services/userService';
 import { isValidEmail, EMAIL_ERROR } from '../utils/emailValidation';
+import BulkDataOperations from '../components/forms/BulkDataOperations';
 
 const SettingsPage: React.FC = () => {
   // User-specific settings (UI preferences)
@@ -1034,13 +1035,16 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Data Management Component */}
+                {/* Bulk Data Operations */}
                 <div className="bg-gray-700 rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-white mb-4">Test Data Management</h3>
-                  <p className="text-gray-400 text-sm mb-4">
-                    Manage test data for development and testing purposes.
-                  </p>
-                  {/* Import DataManagement component here if needed */}
+                  <h3 className="text-lg font-medium text-white mb-4">Bulk Data Operations</h3>
+                  {isSystemAdmin ? (
+                    <BulkDataOperations />
+                  ) : (
+                    <p className="text-gray-500 text-sm">
+                      Only system administrators can perform bulk data operations.
+                    </p>
+                  )}
                 </div>
               </div>
             </Card>
