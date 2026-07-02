@@ -159,7 +159,10 @@ const BulkDataOperations: React.FC = () => {
         if (cancelled) return;
         const allRooms = results.flat();
         setRooms(allRooms);
-        setActiveFacilityTabId((prev) => prev ?? allRooms[0]?.facilityId ?? null);
+        // Default to the first facility that actually has a vacant room, so the
+        // wizard doesn't land on an "all occupied" facility with nothing to pick.
+        const firstVacantRoom = allRooms.find((r) => VACANT_STATUSES.has(r.status));
+        setActiveFacilityTabId((prev) => prev ?? firstVacantRoom?.facilityId ?? allRooms[0]?.facilityId ?? null);
       })
       .catch((err) => {
         if (!cancelled) setActionError(extractErrorMessage(err));
@@ -767,24 +770,25 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
   onClearAllInFacility,
   onSelectAllVacant,
 }) => {
-  // Only facilities with at least one vacant room get a tab — a fully-occupied
-  // facility has nothing actionable to show here, so a tab for it is just noise.
+  // Every facility with a room gets a tab — a facility must never appear to
+  // vanish just because it happens to be fully occupied right now. Facilities
+  // with zero vacant rooms just render a one-line "fully occupied" message
+  // instead of a room grid (see below), rather than dumping 30+ disabled chips.
+  const facilitiesWithRooms = facilities.filter((f) => rooms.some((r) => r.facilityId === f.id));
   const facilitiesWithVacantRooms = facilities.filter((f) =>
     rooms.some((r) => r.facilityId === f.id && VACANT_STATUSES.has(r.status))
   );
 
-  if (facilitiesWithVacantRooms.length === 0) {
-    return <p className="text-gray-500 text-sm">No vacant rooms found.</p>;
+  if (facilitiesWithRooms.length === 0) {
+    return <p className="text-gray-500 text-sm">No rooms found.</p>;
   }
 
   const totalVacant = rooms.filter((r) => VACANT_STATUSES.has(r.status)).length;
   const activeFacility =
-    facilitiesWithVacantRooms.find((f) => f.id === activeFacilityId) ?? facilitiesWithVacantRooms[0];
-  const activeFacilityVacantRooms = rooms.filter(
-    (r) => r.facilityId === activeFacility.id && VACANT_STATUSES.has(r.status)
-  );
-  const hiddenInActiveFacility =
-    rooms.filter((r) => r.facilityId === activeFacility.id).length - activeFacilityVacantRooms.length;
+    facilitiesWithRooms.find((f) => f.id === activeFacilityId) ?? facilitiesWithVacantRooms[0] ?? facilitiesWithRooms[0];
+  const activeFacilityRooms = rooms.filter((r) => r.facilityId === activeFacility.id);
+  const activeFacilityVacantRooms = activeFacilityRooms.filter((r) => VACANT_STATUSES.has(r.status));
+  const hiddenInActiveFacility = activeFacilityRooms.length - activeFacilityVacantRooms.length;
   const query = searchQuery.trim().toLowerCase();
   const visibleRooms = query
     ? activeFacilityVacantRooms.filter((r) => r.roomNumber.toLowerCase().includes(query))
@@ -795,7 +799,7 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-gray-300">
           <span className="text-white font-semibold">{selectedRoomIds.size}</span> of {totalVacant} vacant rooms
-          selected across {facilitiesWithVacantRooms.length} facilities
+          selected across {facilitiesWithVacantRooms.length} of {facilitiesWithRooms.length} facilities
         </p>
         <Button variant="ghost" size="sm" onClick={onSelectAllVacant}>
           Select all vacant rooms
@@ -804,7 +808,7 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
 
       <div className="border-b border-gray-700">
         <nav className="-mb-px flex space-x-6 overflow-x-auto scrollbar-hide">
-          {facilitiesWithVacantRooms.map((facility) => {
+          {facilitiesWithRooms.map((facility) => {
             const facilityRooms = rooms.filter((r) => r.facilityId === facility.id);
             const vacantCount = facilityRooms.filter((r) => VACANT_STATUSES.has(r.status)).length;
             const selectedCount = facilityRooms.filter((r) => selectedRoomIds.has(r.id!)).length;
@@ -817,7 +821,9 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
                 className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
                   isActive
                     ? 'border-primary-500 text-primary-400'
-                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                    : vacantCount === 0
+                      ? 'border-transparent text-gray-600 hover:text-gray-400 hover:border-gray-300'
+                      : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
                 }`}
               >
                 {facility.name} ({selectedCount}/{vacantCount})
@@ -827,53 +833,61 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
         </nav>
       </div>
 
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-gray-500 shrink-0" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search room number..."
-            className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-500"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onSelectAllInFacility(activeFacility.id!)}>
-            Select all in this facility
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => onClearAllInFacility(activeFacility.id!)}>
-            Clear all in this facility
-          </Button>
-        </div>
-      </div>
-
-      {visibleRooms.length === 0 ? (
-        <p className="text-gray-500 text-sm">No rooms match your search.</p>
+      {activeFacilityVacantRooms.length === 0 ? (
+        <p className="text-gray-500 text-sm">
+          All {activeFacilityRooms.length} room(s) in this facility are occupied — nothing to select here.
+        </p>
       ) : (
-        <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto p-1">
-          {visibleRooms.map((room) => {
-            const selected = selectedRoomIds.has(room.id!);
-            return (
-              <button
-                key={room.id}
-                type="button"
-                onClick={() => onToggleRoom(room.id!)}
-                className={`px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  selected
-                    ? 'bg-primary-500 text-secondary-900 border-primary-500'
-                    : 'bg-green-500/20 text-green-400 border-green-500/30 hover:border-green-400'
-                }`}
-              >
-                {room.roomNumber}
-              </button>
-            );
-          })}
-        </div>
-      )}
+        <>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+              <Search className="w-4 h-4 text-gray-500 shrink-0" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search room number..."
+                className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => onSelectAllInFacility(activeFacility.id!)}>
+                Select all in this facility
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => onClearAllInFacility(activeFacility.id!)}>
+                Clear all in this facility
+              </Button>
+            </div>
+          </div>
 
-      {hiddenInActiveFacility > 0 && !query && (
-        <p className="text-xs text-gray-500">{hiddenInActiveFacility} room(s) not shown (not vacant).</p>
+          {visibleRooms.length === 0 ? (
+            <p className="text-gray-500 text-sm">No rooms match your search.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto p-1">
+              {visibleRooms.map((room) => {
+                const selected = selectedRoomIds.has(room.id!);
+                return (
+                  <button
+                    key={room.id}
+                    type="button"
+                    onClick={() => onToggleRoom(room.id!)}
+                    className={`px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      selected
+                        ? 'bg-primary-500 text-secondary-900 border-primary-500'
+                        : 'bg-green-500/20 text-green-400 border-green-500/30 hover:border-green-400'
+                    }`}
+                  >
+                    {room.roomNumber}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {hiddenInActiveFacility > 0 && !query && (
+            <p className="text-xs text-gray-500">{hiddenInActiveFacility} room(s) not shown (not vacant).</p>
+          )}
+        </>
       )}
     </div>
   );
