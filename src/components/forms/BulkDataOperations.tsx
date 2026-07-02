@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
+  Search,
 } from 'lucide-react';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -95,6 +96,10 @@ function extractErrorMessage(err: unknown): string {
   return 'An unexpected error occurred.';
 }
 
+function formatDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const BulkDataOperations: React.FC = () => {
   const [step, setStep] = useState<Step>('choose-action');
   const [mode, setMode] = useState<Mode | null>(null);
@@ -111,12 +116,14 @@ const BulkDataOperations: React.FC = () => {
   const [confirmText, setConfirmText] = useState('');
 
   // Create-mode scope
-  const [createAllFacilities, setCreateAllFacilities] = useState(true);
-  const [createFacilityIds, setCreateFacilityIds] = useState<Set<string>>(new Set());
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
-  const [excludedRoomIds, setExcludedRoomIds] = useState<Set<string>>(new Set());
+  const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
+  const [activeFacilityTabId, setActiveFacilityTabId] = useState<string | null>(null);
+  const [roomSearchQuery, setRoomSearchQuery] = useState('');
   const [createLeaseAndSchedule, setCreateLeaseAndSchedule] = useState(false);
+  const [leaseStartDate, setLeaseStartDate] = useState('');
+  const [leaseEndDate, setLeaseEndDate] = useState('');
 
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -141,17 +148,18 @@ const BulkDataOperations: React.FC = () => {
     };
   }, []);
 
+  // Fetch every facility's rooms once on entering create mode — facilities are
+  // now tabs, not a filterable scope, so there's no need to re-fetch per selection.
   useEffect(() => {
-    if (mode !== 'create') return;
+    if (mode !== 'create' || facilities.length === 0) return;
     let cancelled = false;
     setLoadingRooms(true);
-    const targetFacilityIds = createAllFacilities
-      ? facilities.map((f) => f.id!)
-      : Array.from(createFacilityIds);
-
-    Promise.all(targetFacilityIds.map((id) => roomService.getRoomsByFacility(id)))
+    Promise.all(facilities.map((f) => roomService.getRoomsByFacility(f.id!)))
       .then((results) => {
-        if (!cancelled) setRooms(results.flat());
+        if (cancelled) return;
+        const allRooms = results.flat();
+        setRooms(allRooms);
+        setActiveFacilityTabId((prev) => prev ?? allRooms[0]?.facilityId ?? null);
       })
       .catch((err) => {
         if (!cancelled) setActionError(extractErrorMessage(err));
@@ -159,11 +167,19 @@ const BulkDataOperations: React.FC = () => {
       .finally(() => {
         if (!cancelled) setLoadingRooms(false);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [mode, createAllFacilities, createFacilityIds, facilities]);
+  }, [mode, facilities]);
+
+  // Default the lease term to "1st of this month -> Dec 31 this year" the first
+  // time the admin opts into creating a lease, without clobbering later edits.
+  useEffect(() => {
+    if (!createLeaseAndSchedule || leaseStartDate) return;
+    const now = new Date();
+    setLeaseStartDate(formatDate(new Date(now.getFullYear(), now.getMonth(), 1)));
+    setLeaseEndDate(formatDate(new Date(now.getFullYear(), 11, 31)));
+  }, [createLeaseAndSchedule, leaseStartDate]);
 
   function resetAll() {
     setStep('choose-action');
@@ -173,11 +189,13 @@ const BulkDataOperations: React.FC = () => {
     setSelectedEntityTypes(new Set());
     setSweepExtras(new Set());
     setConfirmText('');
-    setCreateAllFacilities(true);
-    setCreateFacilityIds(new Set());
     setRooms([]);
-    setExcludedRoomIds(new Set());
+    setSelectedRoomIds(new Set());
+    setActiveFacilityTabId(null);
+    setRoomSearchQuery('');
     setCreateLeaseAndSchedule(false);
+    setLeaseStartDate('');
+    setLeaseEndDate('');
     setActionError(null);
     setPreviewResult(null);
     setFinalResult(null);
@@ -210,9 +228,9 @@ const BulkDataOperations: React.FC = () => {
         setPreviewResult(result);
       } else {
         const result = await bulkDataService.previewCreate({
-          facilityIds: createAllFacilities ? undefined : Array.from(createFacilityIds),
-          excludeRoomIds: Array.from(excludedRoomIds),
+          roomIds: Array.from(selectedRoomIds),
           createLeaseAndSchedule,
+          ...(createLeaseAndSchedule ? { leaseStartDate, leaseEndDate } : {}),
         });
         setPreviewResult(result);
       }
@@ -237,9 +255,9 @@ const BulkDataOperations: React.FC = () => {
         setFinalResult(result);
       } else {
         const result = await bulkDataService.executeCreate({
-          facilityIds: createAllFacilities ? undefined : Array.from(createFacilityIds),
-          excludeRoomIds: Array.from(excludedRoomIds),
+          roomIds: Array.from(selectedRoomIds),
           createLeaseAndSchedule,
+          ...(createLeaseAndSchedule ? { leaseStartDate, leaseEndDate } : {}),
         });
         setFinalResult(result);
       }
@@ -385,15 +403,7 @@ const BulkDataOperations: React.FC = () => {
 
       {step === 'choose-scope' && mode === 'create' && (
         <div className="space-y-6">
-          <FacilitySelector
-            facilities={facilities}
-            allSelected={createAllFacilities}
-            selectedIds={createFacilityIds}
-            onAllToggle={setCreateAllFacilities}
-            onIdsChange={setCreateFacilityIds}
-          />
-
-          <div className="border-t border-gray-700 pt-4">
+          <div>
             <h4 className="text-white font-medium mb-1">What should be created?</h4>
             <div className="space-y-2 mt-2">
               <label className="flex items-center gap-2 text-sm text-gray-200 cursor-pointer">
@@ -414,7 +424,8 @@ const BulkDataOperations: React.FC = () => {
                   onChange={() => setCreateLeaseAndSchedule(true)}
                   className="border-gray-600 bg-gray-700"
                 />
-                Renter + draft Lease + Payment Schedule <span className="text-xs text-gray-500">(room will show as Occupied)</span>
+                Renter + active Lease + Payment Schedule{' '}
+                <span className="text-xs text-gray-500">(room will show as Occupied)</span>
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-600 pl-6">
                 <input type="checkbox" checked disabled className="rounded border-gray-700 bg-gray-800" />
@@ -423,21 +434,61 @@ const BulkDataOperations: React.FC = () => {
             </div>
           </div>
 
+          {createLeaseAndSchedule && (
+            <div className="border-t border-gray-700 pt-4">
+              <h4 className="text-white font-medium mb-2">Lease term</h4>
+              <div className="grid grid-cols-2 gap-4 max-w-md">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={leaseStartDate}
+                    onChange={(e) => setLeaseStartDate(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={leaseEndDate}
+                    onChange={(e) => setLeaseEndDate(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="border-t border-gray-700 pt-4">
-            <h4 className="text-white font-medium mb-1">Rooms</h4>
-            <p className="text-gray-500 text-xs mb-3">
-              Only vacant rooms are eligible. Untick a room to exclude it from this run.
-            </p>
+            <h4 className="text-white font-medium mb-3">Rooms</h4>
             {loadingRooms ? (
               <div className="flex items-center gap-2 text-gray-400 text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" /> Loading rooms...
               </div>
             ) : (
-              <RoomExclusionList
-                facilities={createAllFacilities ? facilities : facilities.filter((f) => createFacilityIds.has(f.id!))}
+              <FacilityRoomTabs
+                facilities={facilities}
                 rooms={rooms}
-                excludedRoomIds={excludedRoomIds}
-                onToggleRoom={(roomId) => toggleInSet(excludedRoomIds, roomId, setExcludedRoomIds)}
+                selectedRoomIds={selectedRoomIds}
+                activeFacilityId={activeFacilityTabId}
+                onActiveFacilityChange={setActiveFacilityTabId}
+                searchQuery={roomSearchQuery}
+                onSearchChange={setRoomSearchQuery}
+                onToggleRoom={(roomId) => toggleInSet(selectedRoomIds, roomId, setSelectedRoomIds)}
+                onSelectAllInFacility={(facilityId) => {
+                  const vacantIds = rooms
+                    .filter((r) => r.facilityId === facilityId && VACANT_STATUSES.has(r.status))
+                    .map((r) => r.id!);
+                  setSelectedRoomIds((prev) => new Set([...prev, ...vacantIds]));
+                }}
+                onClearAllInFacility={(facilityId) => {
+                  const facilityRoomIds = new Set(rooms.filter((r) => r.facilityId === facilityId).map((r) => r.id!));
+                  setSelectedRoomIds((prev) => new Set([...prev].filter((id) => !facilityRoomIds.has(id))));
+                }}
+                onSelectAllVacant={() => {
+                  setSelectedRoomIds(new Set(rooms.filter((r) => VACANT_STATUSES.has(r.status)).map((r) => r.id!)));
+                }}
               />
             )}
           </div>
@@ -448,7 +499,16 @@ const BulkDataOperations: React.FC = () => {
             <Button variant="ghost" onClick={() => setStep('choose-action')}>
               <ChevronLeft className="w-4 h-4 mr-1 inline" /> Back
             </Button>
-            <Button variant="primary" onClick={handlePreview} disabled={isBusy || loadingRooms}>
+            <Button
+              variant="primary"
+              onClick={handlePreview}
+              disabled={
+                isBusy ||
+                loadingRooms ||
+                selectedRoomIds.size === 0 ||
+                (createLeaseAndSchedule && (!leaseStartDate || !leaseEndDate))
+              }
+            >
               {isBusy ? <Loader2 className="w-4 h-4 mr-2 inline animate-spin" /> : null}
               Preview Creation <ChevronRight className="w-4 h-4 ml-1 inline" />
             </Button>
@@ -517,10 +577,22 @@ const BulkDataOperations: React.FC = () => {
           <div className="bg-gray-700 rounded-lg p-4 text-sm text-gray-200 space-y-1">
             <p>
               <span className="text-white font-semibold">{previewResult.targetedRoomsCount}</span> placeholder{' '}
-              {createLeaseAndSchedule ? 'renters + leases + payment schedules' : 'renters'} will be created.
+              {createLeaseAndSchedule ? 'renters + active leases + payment schedules' : 'renters'} will be created
+              {createLeaseAndSchedule && leaseStartDate && leaseEndDate
+                ? ` (lease term: ${leaseStartDate} to ${leaseEndDate})`
+                : ''}
+              .
             </p>
-            <p className="text-gray-400">{previewResult.skippedOccupiedCount} rooms skipped (already occupied).</p>
-            <p className="text-gray-400">{previewResult.skippedExcludedCount} rooms excluded by your selection.</p>
+            {previewResult.skippedNotVacantCount > 0 && (
+              <p className="text-gray-400">
+                {previewResult.skippedNotVacantCount} selected room(s) skipped — no longer vacant.
+              </p>
+            )}
+            {previewResult.skippedNotFoundCount > 0 && (
+              <p className="text-gray-400">
+                {previewResult.skippedNotFoundCount} selected room(s) skipped — no longer exist.
+              </p>
+            )}
           </div>
 
           {actionError && <p className="text-red-400 text-sm">{actionError}</p>}
@@ -579,7 +651,7 @@ const BulkDataOperations: React.FC = () => {
               <p>Created {finalResult.createdRenterIds.length} placeholder renter(s).</p>
               {finalResult.createdLeaseIds.length > 0 && (
                 <>
-                  <p>Created {finalResult.createdLeaseIds.length} draft lease(s) and payment schedule(s).</p>
+                  <p>Created {finalResult.createdLeaseIds.length} active lease(s) and payment schedule(s).</p>
                   <p>Rooms with a new lease were marked Occupied.</p>
                 </>
               )}
@@ -663,51 +735,135 @@ const FacilitySelector: React.FC<FacilitySelectorProps> = ({
   );
 };
 
-interface RoomExclusionListProps {
+interface FacilityRoomTabsProps {
   facilities: Facility[];
   rooms: Room[];
-  excludedRoomIds: Set<string>;
+  selectedRoomIds: Set<string>;
+  activeFacilityId: string | null;
+  onActiveFacilityChange: (id: string) => void;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
   onToggleRoom: (roomId: string) => void;
+  onSelectAllInFacility: (facilityId: string) => void;
+  onClearAllInFacility: (facilityId: string) => void;
+  onSelectAllVacant: () => void;
 }
 
-const RoomExclusionList: React.FC<RoomExclusionListProps> = ({ facilities, rooms, excludedRoomIds, onToggleRoom }) => {
-  if (rooms.length === 0) {
-    return <p className="text-gray-500 text-sm">No rooms found for the selected facilities.</p>;
+const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
+  facilities,
+  rooms,
+  selectedRoomIds,
+  activeFacilityId,
+  onActiveFacilityChange,
+  searchQuery,
+  onSearchChange,
+  onToggleRoom,
+  onSelectAllInFacility,
+  onClearAllInFacility,
+  onSelectAllVacant,
+}) => {
+  const facilitiesWithRooms = facilities.filter((f) => rooms.some((r) => r.facilityId === f.id));
+
+  if (facilitiesWithRooms.length === 0) {
+    return <p className="text-gray-500 text-sm">No rooms found.</p>;
   }
+
+  const totalVacant = rooms.filter((r) => VACANT_STATUSES.has(r.status)).length;
+  const activeFacility = facilitiesWithRooms.find((f) => f.id === activeFacilityId) ?? facilitiesWithRooms[0];
+  const activeFacilityRooms = rooms.filter((r) => r.facilityId === activeFacility.id);
+  const query = searchQuery.trim().toLowerCase();
+  const visibleRooms = query
+    ? activeFacilityRooms.filter((r) => r.roomNumber.toLowerCase().includes(query))
+    : activeFacilityRooms;
+
   return (
-    <div className="space-y-4 max-h-64 overflow-y-auto">
-      {facilities.map((facility) => {
-        const facilityRooms = rooms.filter((r) => r.facilityId === facility.id);
-        if (facilityRooms.length === 0) return null;
-        return (
-          <div key={facility.id}>
-            <p className="text-gray-400 text-xs font-medium mb-1">{facility.name}</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
-              {facilityRooms.map((room) => {
-                const vacant = VACANT_STATUSES.has(room.status);
-                return (
-                  <label
-                    key={room.id}
-                    className={`flex items-center gap-2 text-sm ${
-                      vacant ? 'text-gray-200 cursor-pointer' : 'text-gray-600'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={vacant && !excludedRoomIds.has(room.id!)}
-                      disabled={!vacant}
-                      onChange={() => onToggleRoom(room.id!)}
-                      className="rounded border-gray-600 bg-gray-700"
-                    />
-                    {room.roomNumber}
-                    {!vacant && <span className="text-xs">(occupied — skipped)</span>}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-gray-300">
+          <span className="text-white font-semibold">{selectedRoomIds.size}</span> of {totalVacant} vacant rooms
+          selected across {facilitiesWithRooms.length} facilities
+        </p>
+        <Button variant="ghost" size="sm" onClick={onSelectAllVacant}>
+          Select all vacant rooms
+        </Button>
+      </div>
+
+      <div className="border-b border-gray-700">
+        <nav className="-mb-px flex space-x-6 overflow-x-auto">
+          {facilitiesWithRooms.map((facility) => {
+            const facilityRooms = rooms.filter((r) => r.facilityId === facility.id);
+            const vacantCount = facilityRooms.filter((r) => VACANT_STATUSES.has(r.status)).length;
+            const selectedCount = facilityRooms.filter((r) => selectedRoomIds.has(r.id!)).length;
+            const isActive = facility.id === activeFacility.id;
+            return (
+              <button
+                key={facility.id}
+                type="button"
+                onClick={() => onActiveFacilityChange(facility.id!)}
+                className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                  isActive
+                    ? 'border-primary-500 text-primary-400'
+                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                {facility.name} ({selectedCount}/{vacantCount})
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 text-gray-500 shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search room number..."
+            className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-500"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onSelectAllInFacility(activeFacility.id!)}>
+            Select all in this facility
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => onClearAllInFacility(activeFacility.id!)}>
+            Clear all in this facility
+          </Button>
+        </div>
+      </div>
+
+      {visibleRooms.length === 0 ? (
+        <p className="text-gray-500 text-sm">
+          {activeFacilityRooms.length === 0 ? 'No rooms in this facility.' : 'No rooms match your search.'}
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto p-1">
+          {visibleRooms.map((room) => {
+            const vacant = VACANT_STATUSES.has(room.status);
+            const selected = selectedRoomIds.has(room.id!);
+            return (
+              <button
+                key={room.id}
+                type="button"
+                disabled={!vacant}
+                onClick={() => onToggleRoom(room.id!)}
+                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                  !vacant
+                    ? 'opacity-40 cursor-not-allowed bg-gray-800 text-gray-500 border-gray-700'
+                    : selected
+                      ? 'bg-primary-500 text-secondary-900 border-primary-500'
+                      : 'bg-gray-700 text-gray-200 border-gray-600 hover:border-primary-500/50'
+                }`}
+              >
+                {room.roomNumber}
+                {!vacant && <span className="ml-1 text-xs">(occupied)</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

@@ -31,16 +31,18 @@ export interface BulkDeleteResult {
 
 export interface BulkCreateRequest {
   dryRun: boolean;
-  facilityIds?: string[];
-  excludeRoomIds?: string[];
+  roomIds: string[];
   createLeaseAndSchedule: boolean;
+  leaseStartDate?: string;
+  leaseEndDate?: string;
 }
 
 export interface BulkCreateResult {
   dryRun: boolean;
+  requestedRoomsCount: number;
   targetedRoomsCount: number;
-  skippedOccupiedCount: number;
-  skippedExcludedCount: number;
+  skippedNotVacantCount: number;
+  skippedNotFoundCount: number;
   createdRenterIds: string[];
   createdLeaseIds: string[];
   createdScheduleIds: string[];

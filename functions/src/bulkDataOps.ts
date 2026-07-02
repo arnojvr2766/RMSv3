@@ -383,6 +383,17 @@ const VACANT_ROOM_STATUSES = new Set(['available', 'empty']);
 // Up to 4 writes per room (renter+lease+schedule+room status) kept under the 400-op batch cap.
 const CREATE_CHUNK_ROOMS = 100;
 
+// Ported from src/components/forms/NewRentalWizard.tsx's parseDateLocal — duplicated,
+// not imported, since functions/ is a separate TS build from the Vite frontend (same
+// convention already used by buildPlaceholderPaymentSchedule vs. generatePaymentSchedule).
+// Parses a "YYYY-MM-DD" string using its numeric components (not `new Date(dateString)`,
+// which parses as UTC midnight and can shift a day backward once rendered in a local
+// timezone); noon avoids DST edge cases.
+function parseDateLocal(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
 interface PlaceholderRoom {
   id: string;
   facilityId: string;
@@ -455,12 +466,13 @@ function buildPlaceholderRenter(room: PlaceholderRoom, facility: PlaceholderFaci
   };
 }
 
-function buildPlaceholderLease(room: PlaceholderRoom, facility: PlaceholderFacility, renterId: string) {
-  const startDate = admin.firestore.Timestamp.now();
-  const endJs = startDate.toDate();
-  endJs.setMonth(endJs.getMonth() + 12);
-  const endDate = admin.firestore.Timestamp.fromDate(endJs);
-
+function buildPlaceholderLease(
+  room: PlaceholderRoom,
+  facility: PlaceholderFacility,
+  renterId: string,
+  startDate: FirebaseFirestore.Timestamp,
+  endDate: FirebaseFirestore.Timestamp
+) {
   const businessRules = room.businessRules?.usesFacilityDefaults
     ? facility.defaultBusinessRules
     : room.businessRules;
@@ -478,11 +490,15 @@ function buildPlaceholderLease(room: PlaceholderRoom, facility: PlaceholderFacil
     },
     businessRules,
     additionalTerms: '[AUTO-GENERATED PLACEHOLDER LEASE — replace with real lease terms before move-in.]',
-    // Deliberately 'pending', not 'active': checkOverdueRoomsAutoLock (index.ts) only
-    // considers active leases when locking rooms for unpaid rent, so keeping this
-    // 'pending' stops a placeholder with no real payment from getting auto-locked a
-    // few days later. The room itself is still flipped to 'occupied' right away.
-    status: 'pending' as const,
+    // Full parity with a real lease created via NewRentalWizard.tsx (which always
+    // hardcodes 'active'): staff need to capture real payments against this lease
+    // straight away, and leaseService.getLeaseByRoom() only ever finds leases with
+    // status == 'active' — a 'pending' lease is invisible to the Rooms page's
+    // "Payment Status" column and "Capture Payment" action. Trade-off, accepted by
+    // product decision: checkOverdueRoomsAutoLock (index.ts) can now auto-lock this
+    // room if the current month's rent is still unpaid past the grace period,
+    // exactly like it would for a real tenant — expected, not a bug.
+    status: 'active' as const,
   };
 }
 
@@ -545,16 +561,18 @@ function buildPlaceholderPaymentSchedule(lease: PlaceholderLeaseData) {
 
 interface BulkCreateRequest {
   dryRun: boolean;
-  facilityIds?: string[];
-  excludeRoomIds?: string[];
+  roomIds: string[]; // explicit opt-in set chosen by the admin in the wizard
   createLeaseAndSchedule: boolean;
+  leaseStartDate?: string; // "YYYY-MM-DD", required iff createLeaseAndSchedule
+  leaseEndDate?: string; // "YYYY-MM-DD", required iff createLeaseAndSchedule
 }
 
 interface BulkCreateResult {
   dryRun: boolean;
+  requestedRoomsCount: number;
   targetedRoomsCount: number;
-  skippedOccupiedCount: number;
-  skippedExcludedCount: number;
+  skippedNotVacantCount: number; // room exists but is no longer vacant (defensive re-check)
+  skippedNotFoundCount: number; // room id no longer exists
   createdRenterIds: string[];
   createdLeaseIds: string[];
   createdScheduleIds: string[];
@@ -565,50 +583,67 @@ export const bulkCreatePlaceholderRenters = onCall(async (request) => {
   await requireSystemAdmin(request.auth);
 
   const data = request.data as BulkCreateRequest;
-  if (!data || typeof data.dryRun !== 'boolean' || typeof data.createLeaseAndSchedule !== 'boolean') {
+  if (
+    !data ||
+    typeof data.dryRun !== 'boolean' ||
+    typeof data.createLeaseAndSchedule !== 'boolean' ||
+    !Array.isArray(data.roomIds) ||
+    data.roomIds.length === 0
+  ) {
     throw new functions.https.HttpsError(
       'invalid-argument',
-      'dryRun and createLeaseAndSchedule (booleans) are required.'
+      'dryRun, createLeaseAndSchedule (booleans), and a non-empty roomIds array are required.'
     );
   }
 
-  const db = admin.firestore();
-  const facilityIds = data.facilityIds?.filter(Boolean);
-  const excludeRoomIds = new Set(data.excludeRoomIds?.filter(Boolean) ?? []);
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  let startTs: FirebaseFirestore.Timestamp | undefined;
+  let endTs: FirebaseFirestore.Timestamp | undefined;
+  if (data.createLeaseAndSchedule) {
+    if (!data.leaseStartDate || !DATE_RE.test(data.leaseStartDate) || !data.leaseEndDate || !DATE_RE.test(data.leaseEndDate)) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'leaseStartDate and leaseEndDate ("YYYY-MM-DD") are required when createLeaseAndSchedule is true.'
+      );
+    }
+    const startDate = parseDateLocal(data.leaseStartDate);
+    const endDate = parseDateLocal(data.leaseEndDate);
+    if (endDate <= startDate) {
+      throw new functions.https.HttpsError('invalid-argument', 'leaseEndDate must be after leaseStartDate.');
+    }
+    startTs = admin.firestore.Timestamp.fromDate(startDate);
+    endTs = admin.firestore.Timestamp.fromDate(endDate);
+  }
 
-  const facilityDocs = facilityIds?.length
-    ? await queryDocsByIdIn(db, 'facilities', facilityIds)
-    : await getAllDocs(db, 'facilities');
+  const db = admin.firestore();
+  const requestedRoomIds = Array.from(new Set(data.roomIds.filter(Boolean)));
+
+  const roomDocs = await queryDocsByIdIn(db, 'rooms', requestedRoomIds);
+  const skippedNotFoundCount = requestedRoomIds.length - roomDocs.length;
+
+  let skippedNotVacantCount = 0;
+  const targetRoomDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  for (const roomDoc of roomDocs) {
+    if (VACANT_ROOM_STATUSES.has(roomDoc.data().status)) {
+      targetRoomDocs.push(roomDoc);
+    } else {
+      skippedNotVacantCount++;
+    }
+  }
+
+  const facilityIds = Array.from(new Set(targetRoomDocs.map((d) => d.data().facilityId as string)));
+  const facilityDocs = await queryDocsByIdIn(db, 'facilities', facilityIds);
   const facilitiesById = new Map<string, PlaceholderFacility>(
     facilityDocs.map((d) => [d.id, { id: d.id, ...(d.data() as Omit<PlaceholderFacility, 'id'>) }])
   );
 
-  const allRoomDocs = facilityIds?.length
-    ? await queryByFieldIn(db, 'rooms', 'facilityId', facilityIds)
-    : await getAllDocs(db, 'rooms');
-
-  let skippedOccupiedCount = 0;
-  let skippedExcludedCount = 0;
-  const targetRoomDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
-  for (const roomDoc of allRoomDocs) {
-    const room = roomDoc.data();
-    if (!VACANT_ROOM_STATUSES.has(room.status)) {
-      skippedOccupiedCount++;
-      continue;
-    }
-    if (excludeRoomIds.has(roomDoc.id)) {
-      skippedExcludedCount++;
-      continue;
-    }
-    targetRoomDocs.push(roomDoc);
-  }
-
   if (data.dryRun) {
     const result: BulkCreateResult = {
       dryRun: true,
+      requestedRoomsCount: requestedRoomIds.length,
       targetedRoomsCount: targetRoomDocs.length,
-      skippedOccupiedCount,
-      skippedExcludedCount,
+      skippedNotVacantCount,
+      skippedNotFoundCount,
       createdRenterIds: [],
       createdLeaseIds: [],
       createdScheduleIds: [],
@@ -637,7 +672,7 @@ export const bulkCreatePlaceholderRenters = onCall(async (request) => {
 
         if (data.createLeaseAndSchedule) {
           const leaseRef = db.collection('leases').doc();
-          const leaseData = buildPlaceholderLease(room, facility, renterRef.id);
+          const leaseData = buildPlaceholderLease(room, facility, renterRef.id, startTs!, endTs!);
           batch.set(leaseRef, { ...leaseData, createdAt: now, updatedAt: now });
           createdLeaseIds.push(leaseRef.id);
 
@@ -659,9 +694,10 @@ export const bulkCreatePlaceholderRenters = onCall(async (request) => {
 
   const result: BulkCreateResult = {
     dryRun: false,
+    requestedRoomsCount: requestedRoomIds.length,
     targetedRoomsCount: targetRoomDocs.length,
-    skippedOccupiedCount,
-    skippedExcludedCount,
+    skippedNotVacantCount,
+    skippedNotFoundCount,
     createdRenterIds,
     createdLeaseIds,
     createdScheduleIds,
