@@ -414,7 +414,7 @@ const BulkDataOperations: React.FC = () => {
                   onChange={() => setCreateLeaseAndSchedule(true)}
                   className="border-gray-600 bg-gray-700"
                 />
-                Renter + draft Lease + Payment Schedule
+                Renter + draft Lease + Payment Schedule <span className="text-xs text-gray-500">(room will show as Occupied)</span>
               </label>
               <label className="flex items-center gap-2 text-sm text-gray-600 pl-6">
                 <input type="checkbox" checked disabled className="rounded border-gray-700 bg-gray-800" />
@@ -578,7 +578,10 @@ const BulkDataOperations: React.FC = () => {
             <div className="text-sm text-gray-300">
               <p>Created {finalResult.createdRenterIds.length} placeholder renter(s).</p>
               {finalResult.createdLeaseIds.length > 0 && (
-                <p>Created {finalResult.createdLeaseIds.length} draft lease(s) and payment schedule(s).</p>
+                <>
+                  <p>Created {finalResult.createdLeaseIds.length} draft lease(s) and payment schedule(s).</p>
+                  <p>Rooms with a new lease were marked Occupied.</p>
+                </>
               )}
             </div>
           )}

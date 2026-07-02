@@ -380,8 +380,8 @@ export const bulkDeleteTenantData = onCall(async (request) => {
 // idNumber prefix, the `.invalid` email TLD, and an explicit `notes` marker.
 
 const VACANT_ROOM_STATUSES = new Set(['available', 'empty']);
-// 3 writes per room (renter+lease+schedule) kept under the 400-op batch cap.
-const CREATE_CHUNK_ROOMS = 130;
+// Up to 4 writes per room (renter+lease+schedule+room status) kept under the 400-op batch cap.
+const CREATE_CHUNK_ROOMS = 100;
 
 interface PlaceholderRoom {
   id: string;
@@ -401,6 +401,7 @@ interface PlaceholderRoom {
 
 interface PlaceholderFacility {
   id: string;
+  name: string;
   address: string;
   defaultBusinessRules: {
     lateFeeAmount: number;
@@ -411,15 +412,28 @@ interface PlaceholderFacility {
   };
 }
 
+// Short, human-readable facility code for placeholder IDs/emails (e.g. "RBR
+// Durban Central" -> "RBR") — avoids embedding raw Firestore doc IDs, which
+// are long and unreadable wherever idNumber/email get displayed in the UI.
+function facilityCode(facility: PlaceholderFacility): string {
+  const code = (facility.name.split(/\s+/)[0] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return code || 'FAC';
+}
+
+function roomSlug(roomNumber: string): string {
+  return roomNumber.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 function buildPlaceholderRenter(room: PlaceholderRoom, facility: PlaceholderFacility) {
+  const code = facilityCode(facility);
   return {
     personalInfo: {
       firstName: 'Placeholder',
       lastName: `Room ${room.roomNumber}`,
-      idNumber: `PLACEHOLDER-${facility.id}-${room.id}`,
+      idNumber: `PLACEHOLDER-${code}-${room.roomNumber}`,
       dateOfBirth: null,
       phone: '0000000000',
-      email: `placeholder+${room.id}@rentdesk.invalid`,
+      email: `placeholder+${code.toLowerCase()}-${roomSlug(room.roomNumber)}@rentdesk.invalid`,
       emergencyContact: { name: 'N/A - Placeholder', phone: '0000000000', relationship: 'N/A' },
     },
     address: {
@@ -464,7 +478,11 @@ function buildPlaceholderLease(room: PlaceholderRoom, facility: PlaceholderFacil
     },
     businessRules,
     additionalTerms: '[AUTO-GENERATED PLACEHOLDER LEASE — replace with real lease terms before move-in.]',
-    status: 'pending' as const, // not 'active' — a placeholder shouldn't count as a live occupancy
+    // Deliberately 'pending', not 'active': checkOverdueRoomsAutoLock (index.ts) only
+    // considers active leases when locking rooms for unpaid rent, so keeping this
+    // 'pending' stops a placeholder with no real payment from getting auto-locked a
+    // few days later. The room itself is still flipped to 'occupied' right away.
+    status: 'pending' as const,
   };
 }
 
@@ -627,6 +645,10 @@ export const bulkCreatePlaceholderRenters = onCall(async (request) => {
           const scheduleData = buildPlaceholderPaymentSchedule({ ...leaseData, id: leaseRef.id });
           batch.set(scheduleRef, { ...scheduleData, createdAt: now, updatedAt: now });
           createdScheduleIds.push(scheduleRef.id);
+
+          // Mirror NewRentalWizard.tsx's real-lease flow, which flips the room
+          // to 'occupied' immediately on lease creation (not gated on payment).
+          batch.update(roomDoc.ref, { status: 'occupied', updatedAt: now });
         }
       } catch (err) {
         errors.push({ roomId: roomDoc.id, message: (err as Error).message });
