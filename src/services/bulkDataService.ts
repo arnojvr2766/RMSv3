@@ -25,6 +25,7 @@ export interface BulkDeleteResult {
   dryRun: boolean;
   counts: Record<string, number>;
   storageFilesCount: number;
+  roomsResetCount: number;
   backupPath?: string;
   errors: Array<{ collection: string; message: string }>;
 }

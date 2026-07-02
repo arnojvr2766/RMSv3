@@ -538,6 +538,12 @@ const BulkDataOperations: React.FC = () => {
                 </tr>
               </tbody>
             </table>
+            {previewResult.roomsResetCount > 0 && (
+              <p className="text-sm text-gray-300 mt-3 pt-3 border-t border-gray-600">
+                <span className="text-white font-semibold">{previewResult.roomsResetCount}</span> occupied room(s)
+                will be reset to Available.
+              </p>
+            )}
           </div>
 
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
@@ -639,10 +645,9 @@ const BulkDataOperations: React.FC = () => {
                   </p>
                 ))}
               {finalResult.storageFilesCount > 0 && <p>Removed {finalResult.storageFilesCount} Storage file(s).</p>}
-              <p className="text-yellow-400 mt-2">
-                Room statuses were not changed — reset any affected rooms to Available manually in Rooms management
-                if needed.
-              </p>
+              {finalResult.roomsResetCount > 0 && (
+                <p>Reset {finalResult.roomsResetCount} room(s) to Available.</p>
+              )}
             </div>
           )}
 
@@ -762,26 +767,35 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
   onClearAllInFacility,
   onSelectAllVacant,
 }) => {
-  const facilitiesWithRooms = facilities.filter((f) => rooms.some((r) => r.facilityId === f.id));
+  // Only facilities with at least one vacant room get a tab — a fully-occupied
+  // facility has nothing actionable to show here, so a tab for it is just noise.
+  const facilitiesWithVacantRooms = facilities.filter((f) =>
+    rooms.some((r) => r.facilityId === f.id && VACANT_STATUSES.has(r.status))
+  );
 
-  if (facilitiesWithRooms.length === 0) {
-    return <p className="text-gray-500 text-sm">No rooms found.</p>;
+  if (facilitiesWithVacantRooms.length === 0) {
+    return <p className="text-gray-500 text-sm">No vacant rooms found.</p>;
   }
 
   const totalVacant = rooms.filter((r) => VACANT_STATUSES.has(r.status)).length;
-  const activeFacility = facilitiesWithRooms.find((f) => f.id === activeFacilityId) ?? facilitiesWithRooms[0];
-  const activeFacilityRooms = rooms.filter((r) => r.facilityId === activeFacility.id);
+  const activeFacility =
+    facilitiesWithVacantRooms.find((f) => f.id === activeFacilityId) ?? facilitiesWithVacantRooms[0];
+  const activeFacilityVacantRooms = rooms.filter(
+    (r) => r.facilityId === activeFacility.id && VACANT_STATUSES.has(r.status)
+  );
+  const hiddenInActiveFacility =
+    rooms.filter((r) => r.facilityId === activeFacility.id).length - activeFacilityVacantRooms.length;
   const query = searchQuery.trim().toLowerCase();
   const visibleRooms = query
-    ? activeFacilityRooms.filter((r) => r.roomNumber.toLowerCase().includes(query))
-    : activeFacilityRooms;
+    ? activeFacilityVacantRooms.filter((r) => r.roomNumber.toLowerCase().includes(query))
+    : activeFacilityVacantRooms;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-gray-300">
           <span className="text-white font-semibold">{selectedRoomIds.size}</span> of {totalVacant} vacant rooms
-          selected across {facilitiesWithRooms.length} facilities
+          selected across {facilitiesWithVacantRooms.length} facilities
         </p>
         <Button variant="ghost" size="sm" onClick={onSelectAllVacant}>
           Select all vacant rooms
@@ -789,8 +803,8 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
       </div>
 
       <div className="border-b border-gray-700">
-        <nav className="-mb-px flex space-x-6 overflow-x-auto">
-          {facilitiesWithRooms.map((facility) => {
+        <nav className="-mb-px flex space-x-6 overflow-x-auto scrollbar-hide">
+          {facilitiesWithVacantRooms.map((facility) => {
             const facilityRooms = rooms.filter((r) => r.facilityId === facility.id);
             const vacantCount = facilityRooms.filter((r) => VACANT_STATUSES.has(r.status)).length;
             const selectedCount = facilityRooms.filter((r) => selectedRoomIds.has(r.id!)).length;
@@ -835,34 +849,31 @@ const FacilityRoomTabs: React.FC<FacilityRoomTabsProps> = ({
       </div>
 
       {visibleRooms.length === 0 ? (
-        <p className="text-gray-500 text-sm">
-          {activeFacilityRooms.length === 0 ? 'No rooms in this facility.' : 'No rooms match your search.'}
-        </p>
+        <p className="text-gray-500 text-sm">No rooms match your search.</p>
       ) : (
         <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto p-1">
           {visibleRooms.map((room) => {
-            const vacant = VACANT_STATUSES.has(room.status);
             const selected = selectedRoomIds.has(room.id!);
             return (
               <button
                 key={room.id}
                 type="button"
-                disabled={!vacant}
                 onClick={() => onToggleRoom(room.id!)}
-                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                  !vacant
-                    ? 'opacity-40 cursor-not-allowed bg-gray-800 text-gray-500 border-gray-700'
-                    : selected
-                      ? 'bg-primary-500 text-secondary-900 border-primary-500'
-                      : 'bg-gray-700 text-gray-200 border-gray-600 hover:border-primary-500/50'
+                className={`px-2 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  selected
+                    ? 'bg-primary-500 text-secondary-900 border-primary-500'
+                    : 'bg-green-500/20 text-green-400 border-green-500/30 hover:border-green-400'
                 }`}
               >
                 {room.roomNumber}
-                {!vacant && <span className="ml-1 text-xs">(occupied)</span>}
               </button>
             );
           })}
         </div>
+      )}
+
+      {hiddenInActiveFacility > 0 && !query && (
+        <p className="text-xs text-gray-500">{hiddenInActiveFacility} room(s) not shown (not vacant).</p>
       )}
     </div>
   );

@@ -257,6 +257,7 @@ interface BulkDeleteResult {
   dryRun: boolean;
   counts: Record<string, number>;
   storageFilesCount: number;
+  roomsResetCount: number;
   backupPath?: string;
   errors: Array<{ collection: string; message: string }>;
 }
@@ -297,8 +298,26 @@ export const bulkDeleteTenantData = onCall(async (request) => {
   if (sweepExtras.includes('notifications')) counts.notifications = notificationDocs.length;
   if (sweepExtras.includes('roomStatusHistory')) counts.roomStatusHistory = roomStatusHistoryDocs.length;
 
+  // A deleted lease shouldn't leave its room stuck showing `occupied` — mirror
+  // src/services/leaseTerminationService.ts's real termination flow, which sets
+  // the room straight to 'available' (this codebase never actually implements
+  // the 'locked' pending-payout stage CLAUDE.md describes). Only rooms currently
+  // `occupied` are touched — `maintenance`/`unavailable`/`locked` rooms are left
+  // alone since those states can be unrelated to the specific lease being deleted
+  // (e.g. staff-flagged maintenance, or an overdue-rent auto-lock).
+  const leaseDocsForRoomReset = docsByType.leases ?? [];
+  const roomIdsForReset = Array.from(new Set(leaseDocsForRoomReset.map((d) => d.data().roomId as string)));
+  const roomDocsForReset = await queryDocsByIdIn(db, 'rooms', roomIdsForReset);
+  const occupiedRoomDocsForReset = roomDocsForReset.filter((d) => d.data().status === 'occupied');
+
   if (data.dryRun) {
-    const result: BulkDeleteResult = { dryRun: true, counts, storageFilesCount: 0, errors: [] };
+    const result: BulkDeleteResult = {
+      dryRun: true,
+      counts,
+      storageFilesCount: 0,
+      roomsResetCount: occupiedRoomDocsForReset.length,
+      errors: [],
+    };
     return result;
   }
 
@@ -345,8 +364,7 @@ export const bulkDeleteTenantData = onCall(async (request) => {
     }
   }
 
-  // Rooms/facilities are never touched by this tool — a deleted renter's room
-  // may still show as `occupied` and needs a manual reset in Rooms management.
+  // Facilities are never touched by this tool.
   let storageFilesCount = 0;
   const leaseDocs = docsByType.leases ?? [];
   for (const leaseDoc of leaseDocs) {
@@ -361,10 +379,26 @@ export const bulkDeleteTenantData = onCall(async (request) => {
     }
   }
 
+  if (occupiedRoomDocsForReset.length) {
+    try {
+      const nowTs = admin.firestore.Timestamp.now();
+      for (const group of chunk(occupiedRoomDocsForReset, DELETE_CHUNK_SIZE)) {
+        const roomBatch = db.batch();
+        for (const roomDoc of group) {
+          roomBatch.update(roomDoc.ref, { status: 'available', updatedAt: nowTs });
+        }
+        await roomBatch.commit();
+      }
+    } catch (err) {
+      errors.push({ collection: 'rooms', message: `Failed resetting room statuses: ${(err as Error).message}` });
+    }
+  }
+
   const result: BulkDeleteResult = {
     dryRun: false,
     counts,
     storageFilesCount,
+    roomsResetCount: occupiedRoomDocsForReset.length,
     backupPath: `gs://${bucket.name}/bulk-data-backups/${runId}/`,
     errors,
   };
